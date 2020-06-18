@@ -118,7 +118,8 @@ class FeatureExtractor():
 
         if threshold is None:
             threshold = 0.95 * np.max(self.NCC)
-        max_indices = np.array(np.where(self.NCC > threshold)).T
+        # max_indices = np.array(np.where(self.NCC > threshold)).T
+        max_indices = np.array([np.unravel_index(np.argmax(self.NCC), self.NCC.shape)])
         print("detected boxes: {}".format(len(max_indices)))
 
         boxes = []
@@ -159,5 +160,6 @@ class FeatureExtractor():
             boxes.append([(x1, y1), (x2, y2)])
             centers.append((x_center, y_center))
             scores.append(np.sum(NCC_part))
+            print(scores)
 
         return boxes, centers, scores
