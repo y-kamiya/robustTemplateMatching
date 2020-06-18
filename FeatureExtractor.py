@@ -164,7 +164,7 @@ class FeatureExtractor():
 
             boxes.append([(x1, y1), (x2, y2)])
             centers.append((x_center, y_center))
-            scores.append(np.sum(NCC_part))
+            scores.append(np.average(NCC_part))
             print(scores)
 
         return boxes, centers, scores
