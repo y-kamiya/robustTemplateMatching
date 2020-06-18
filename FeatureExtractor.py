@@ -125,9 +125,13 @@ class FeatureExtractor():
         boxes = []
         centers = []
         scores = []
+        x_ranges = [ [], [0], [0, 1], [-1, 0, 1], [-2, -1, 0, 1], ]
+        y_ranges = [ [], [0], [0, 1], [-1, 0, 1], ]
         for max_index in max_indices:
             i_star, j_star = max_index
-            NCC_part = self.NCC[i_star-1:i_star+2, j_star-2:j_star+2]
+            i_min = max(0, i_star-1)
+            j_min = max(0, j_star-2)
+            NCC_part = self.NCC[i_min:i_star+2, j_min:j_star+2]
 
             x_center = (j_star + self.template_feature_map.size()
                         [-1]/2) * image.size()[-1] // self.image_feature_map.size()[-1]
@@ -141,14 +145,15 @@ class FeatureExtractor():
 
             stride_product = self.product(self.stride[:self.l_star])
 
+            shape = NCC_part.shape
             x1 = np.sum(
-                NCC_part * (x1_0 + np.array([-2, -1, 0, 1]) * stride_product)[None, :]) / np.sum(NCC_part)
+                NCC_part * (x1_0 + np.array(x_ranges[shape[1]]) * stride_product)[None, :]) / np.sum(NCC_part)
             x2 = np.sum(
-                NCC_part * (x2_0 + np.array([-2, -1, 0, 1]) * stride_product)[None, :]) / np.sum(NCC_part)
+                NCC_part * (x2_0 + np.array(x_ranges[shape[1]]) * stride_product)[None, :]) / np.sum(NCC_part)
             y1 = np.sum(
-                NCC_part * (y1_0 + np.array([-1, 0, 1]) * stride_product)[:, None]) / np.sum(NCC_part)
+                NCC_part * (y1_0 + np.array(y_ranges[shape[0]]) * stride_product)[:, None]) / np.sum(NCC_part)
             y2 = np.sum(
-                NCC_part * (y2_0 + np.array([-1, 0, 1]) * stride_product)[:, None]) / np.sum(NCC_part)
+                NCC_part * (y2_0 + np.array(y_ranges[shape[0]]) * stride_product)[:, None]) / np.sum(NCC_part)
 
             x1 = int(round(x1))
             x2 = int(round(x2))
