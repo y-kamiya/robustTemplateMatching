@@ -45,9 +45,33 @@ def is_img(path):
     _, ext = os.path.splitext(path)
     return ext in ['.png', '.jpg']
 
+def extract_labels(path, is_template=False):
+    filename = os.path.basename(path)
+    name, _ = os.path.splitext(filename)
+    if is_template:
+        return [name]
+
+    return name.split('@')[:-1]
+
 def get_best_match_templates(score_map):
-    for entry in score_map.values():
-        return {'boxes': entry[0], 'scores': entry[2]}
+    for template_path, entry in score_map.items():
+        labels = extract_labels(template_path, True)
+        return {'label': labels[0], 'boxes': entry[0], 'scores': entry[2]}
+
+def evaluate(result):
+    n_all = 0
+    n_correct = 0
+
+    for image_path, template_label in result.items():
+        n_all += 1
+        labels = extract_labels(image_path)
+        if template_label in labels:
+            n_correct += 1
+
+    print('accuracy: {}'.format(n_correct / n_all * 100))
+
+    with open('result.txt', 'w') as f:
+        print(result, f)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='robust template matching using CNN')
@@ -82,6 +106,7 @@ if __name__ == '__main__':
     print(image_paths)
     print(template_paths)
 
+    result = {}
     for image_path in image_paths:
         score_map = {}
         raw_image = cv2.imread(image_path)[..., ::-1]
@@ -100,6 +125,7 @@ if __name__ == '__main__':
 
         boxes = best_matches['boxes']
         scores = best_matches['scores']
+        label = best_matches['label']
         if len(boxes) == 0:
             continue
 
@@ -113,3 +139,6 @@ if __name__ == '__main__':
             
         cv2.imwrite(os.path.join(args.output_dir, os.path.basename(image_path)), d_img[..., ::-1])
         
+        result[image_path] = label
+
+    evaluate(result)
