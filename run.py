@@ -56,7 +56,7 @@ class Evaluator:
 
         return name.split('@')[:-1]
 
-    def get_best_match_templates(self, score_map):
+    def get_matched_templates(self, score_map):
         for template_path, entry in score_map.items():
             labels = self.extract_labels(template_path, True)
             return {'label': labels[0], 'boxes': entry[0], 'scores': entry[2]}
@@ -112,30 +112,29 @@ class Evaluator:
                 raw_template = cv2.imread(template_path)[..., ::-1]
                 template = image_transform(raw_template.copy()).unsqueeze(0)
 
-                boxes, centers, scores = FE(
-                    template, image, threshold=0.1, use_cython=self.config.use_cython)
-                score_map[template_path] = [boxes, centers, scores]
+                boxes, centers, scores = FE(template, image, use_cython=self.config.use_cython)
 
-            best_matches = self.get_best_match_templates(score_map)
+                indexes = self.nms(boxes, scores, thresh=0.5)
+                print("detected objects: {}".format(len(indexes)))
+
+                score_map[template_path] = [boxes[indexes], centers[indexes], scores[indexes]]
+
+            best_matches = self.get_matched_templates(score_map)
             print('{} matches {}'.format(image_path, best_matches))
 
             boxes = best_matches['boxes']
-            scores = best_matches['scores']
-            label = best_matches['label']
             if len(boxes) == 0:
                 continue
 
             d_img = raw_image.astype(np.uint8).copy()
-            nms_res = self.nms(np.array(boxes), np.array(scores), thresh=0.5)
-            print("detected objects: {}".format(len(nms_res)))
-            for i in nms_res:
-                d_img = cv2.rectangle(d_img, boxes[i][0], boxes[i][1], (255, 0, 0), 3)
+            for box in boxes:
+                d_img = cv2.rectangle(d_img, (box[0][0],box[0][1]), (box[1][0],box[1][1]), (255, 0, 0), 3)
                 # d_img = cv2.circle(d_img, centers[i], int(
                 #     (boxes[i][1][0] - boxes[i][0][0])*0.2), (0, 0, 255), 2)
                 
             cv2.imwrite(os.path.join(self.config.output_dir, os.path.basename(image_path)), d_img[..., ::-1])
             
-            result[image_path] = label
+            result[image_path] = best_matches['label']
 
         self.output_result(result)
 
