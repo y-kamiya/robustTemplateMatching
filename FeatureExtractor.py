@@ -35,6 +35,8 @@ class FeatureExtractor():
 
         self.rf = np.array(self.calc_rf(self.f, self.stride))
 
+        self.cache = {}
+
     def save_template_feature_map(self, module, input, output):
         self.template_feature_map = output.detach()
 
@@ -74,26 +76,43 @@ class FeatureExtractor():
         NCC = np.sum(tmp*F.reshape(F.shape[-3], 1, 1, F.shape[-2], F.shape[-1]), axis=(0, 3, 4))
         return NCC
 
-    def __call__(self, template, image, threshold=None, use_cython=True):
+    def remove_cache(self, image_path):
+        del self.cache[image_path]
+
+    def __call__(self, template_path, template, image_path, image, threshold=None, use_cython=True):
         if self.use_cuda:
             template = template.cuda()
             image = image.cuda()
 
         self.l_star = self.calc_l_star(template)
 
+        if image_path not in self.cache:
+            self.cache[image_path] = {}
+
+        if template_path not in self.cache:
+            self.cache[template_path] = {}
+
         print("save features...")
 
-        # save template feature map (named F in paper)
-        template_handle = self.model[self.index[self.l_star]].register_forward_hook(
-            self.save_template_feature_map)
-        self.model(template)
-        template_handle.remove()
+        if self.l_star not in self.cache[template_path]:
+            # save template feature map (named F in paper)
+            template_handle = self.model[self.index[self.l_star]].register_forward_hook(
+                self.save_template_feature_map)
+            self.model(template)
+            template_handle.remove()
+            self.cache[template_path][self.l_star] = self.template_feature_map
+        else:
+            self.template_feature_map = self.cache[template_path][self.l_star]
 
-        # save image feature map (named M in papar)
-        image_handle = self.model[self.index[self.l_star]].register_forward_hook(
-            self.save_image_feature_map)
-        self.model(image)
-        image_handle.remove()
+        if self.l_star not in self.cache[image_path]:
+            # save image feature map (named M in papar)
+            image_handle = self.model[self.index[self.l_star]].register_forward_hook(
+                self.save_image_feature_map)
+            self.model(image)
+            image_handle.remove()
+            self.cache[image_path][self.l_star] = self.image_feature_map
+        else:
+            self.image_feature_map = self.cache[image_path][self.l_star]
 
         if self.use_cuda:
             self.template_feature_map = self.template_feature_map.cpu()
