@@ -56,10 +56,17 @@ class Evaluator:
 
         return name.split('@')[:-1]
 
-    def get_matched_templates(self, score_map):
+    def get_matched_templates(self, score_map, n_top):
+        entry_all = []
         for template_path, entry in score_map.items():
-            labels = self.extract_labels(template_path, True)
-            return {'label': labels[0], 'boxes': entry[0], 'scores': entry[2]}
+            for i in range(len(entry[0])):
+                entry_all.append((template_path, entry[0][i], entry[1][i], entry[2][i]))
+
+        sorted_entries = sorted(entry_all, key=lambda x:-x[3])[:n_top]
+
+        return sorted_entries
+        # labels = self.extract_labels(template_path, True)
+        # return {'label': labels[0], 'boxes': entry[0], 'scores': entry[2]}
 
     def output_result(self, result):
         n_all = 0
@@ -119,22 +126,24 @@ class Evaluator:
 
                 score_map[template_path] = [boxes[indexes], centers[indexes], scores[indexes]]
 
-            best_matches = self.get_matched_templates(score_map)
-            print('{} matches {}'.format(image_path, best_matches))
+            matched_entries = self.get_matched_templates(score_map, 2)
+            print('{} matches {}'.format(image_path, matched_entries))
 
-            boxes = best_matches['boxes']
-            if len(boxes) == 0:
+            if len(matched_entries) == 0:
                 continue
 
+            result[image_path] = []
             d_img = raw_image.astype(np.uint8).copy()
-            for box in boxes:
+            for entry in matched_entries:
+                box = entry[1]
                 d_img = cv2.rectangle(d_img, (box[0][0],box[0][1]), (box[1][0],box[1][1]), (255, 0, 0), 3)
                 # d_img = cv2.circle(d_img, centers[i], int(
                 #     (boxes[i][1][0] - boxes[i][0][0])*0.2), (0, 0, 255), 2)
+
+                result[image_path].append(entry[0])
                 
             cv2.imwrite(os.path.join(self.config.output_dir, os.path.basename(image_path)), d_img[..., ::-1])
             
-            result[image_path] = best_matches['label']
 
         self.output_result(result)
 
