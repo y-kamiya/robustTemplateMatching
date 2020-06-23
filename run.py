@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch
 import argparse
 from FeatureExtractor import FeatureExtractor
+import sys
 
 
 def nms(dets, scores, thresh):
@@ -65,7 +66,12 @@ if __name__ == '__main__':
     vgg_feature = models.vgg13(pretrained=True).features
     FE = FeatureExtractor(vgg_feature, use_cuda=args.use_cuda, padding=True)
     boxes, centers, scores = FE(
-        template, image, threshold=None, use_cython=args.use_cython)
+        template, image, threshold=0.1, use_cython=args.use_cython)
+
+    if len(boxes) == 0:
+        print("no matching")
+        sys.exit()
+
     d_img = raw_image.astype(np.uint8).copy()
     nms_res = nms(np.array(boxes), np.array(scores), thresh=0.5)
     print("detected objects: {}".format(len(nms_res)))
