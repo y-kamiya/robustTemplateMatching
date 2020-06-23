@@ -23,14 +23,14 @@ class TestRun(unittest.TestCase):
 
     def test_get_matched_templates(self):
         score_map = {
-            'aaa/bbb.png': ([[],[]], [[],[]], [1.0, 2.0]),
-            'aaa/ccc.png': ([[],[]], [[],[]], [3.0, 1.0]),
-            'aaa/ddd.png': ([[],[]], [[],[]], [1.0, 1.0]),
+            'aaa/bbb.png': ([[],[]], [1.0, 2.0]),
+            'aaa/ccc.png': ([[],[]], [3.0, 1.0]),
+            'aaa/ddd.png': ([[],[]], [1.0, 1.0]),
         };
         result = self.instance.get_matched_templates(score_map, 2)
 
         self.assertEqual(result[0][0], 'aaa/ccc.png')
-        self.assertEqual(result[0][3], 3.0)
+        self.assertEqual(result[0][2], 3.0)
         self.assertEqual(result[1][0], 'aaa/bbb.png')
-        self.assertEqual(result[1][3], 2.0)
+        self.assertEqual(result[1][2], 2.0)
 

@@ -60,9 +60,9 @@ class Evaluator:
         entry_all = []
         for template_path, entry in score_map.items():
             for i in range(len(entry[0])):
-                entry_all.append((template_path, entry[0][i], entry[1][i], entry[2][i]))
+                entry_all.append((template_path, entry[0][i], entry[1][i]))
 
-        sorted_entries = sorted(entry_all, key=lambda x:-x[3])[:n_top]
+        sorted_entries = sorted(entry_all, key=lambda x:-x[2])[:n_top]
 
         return sorted_entries
         # labels = self.extract_labels(template_path, True)
@@ -119,12 +119,12 @@ class Evaluator:
                 raw_template = cv2.imread(template_path)[..., ::-1]
                 template = image_transform(raw_template.copy()).unsqueeze(0)
 
-                boxes, centers, scores = FE(template, image, use_cython=self.config.use_cython)
+                boxes, scores = FE(template, image, use_cython=self.config.use_cython)
 
                 indexes = self.nms(boxes, scores, thresh=0.5)
                 print("detected objects: {}".format(len(indexes)))
 
-                score_map[template_path] = [boxes[indexes], centers[indexes], scores[indexes]]
+                score_map[template_path] = [boxes[indexes], scores[indexes]]
 
             matched_entries = self.get_matched_templates(score_map, 2)
             print('{} matches {}'.format(image_path, matched_entries))
@@ -137,8 +137,6 @@ class Evaluator:
             for entry in matched_entries:
                 box = entry[1]
                 d_img = cv2.rectangle(d_img, (box[0][0],box[0][1]), (box[1][0],box[1][1]), (255, 0, 0), 3)
-                # d_img = cv2.circle(d_img, centers[i], int(
-                #     (boxes[i][1][0] - boxes[i][0][0])*0.2), (0, 0, 255), 2)
 
                 result[image_path].append(entry[0])
                 

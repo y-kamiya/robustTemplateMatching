@@ -163,9 +163,9 @@ class FeatureExtractor():
             y_center = int(round(y_center))
 
             boxes.append([(x1, y1), (x2, y2)])
-            centers.append((x_center, y_center))
+            # centers.append((x_center, y_center))
             scores.append(np.average(NCC_part))
             print(scores)
 
-        return np.array(boxes), np.array(centers), np.array(scores)
+        return np.array(boxes), np.array(scores)
         # return boxes, centers, scores
