@@ -1,3 +1,4 @@
+import os
 import copy
 import matplotlib.pyplot as plt
 import numpy as np
@@ -40,11 +41,19 @@ def nms(dets, scores, thresh):
 
     return keep
     
+def is_img(path):
+    _, ext = os.path.splitext(path)
+    return ext in ['.png', '.jpg']
+
+def get_best_match_templates(score_map):
+    for entry in score_map.values():
+        return {'boxes': entry[0], 'scores': entry[2]}
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='robust template matching using CNN')
-    parser.add_argument('image_path')
-    parser.add_argument('template_path')
+    parser.add_argument('image_dir')
+    parser.add_argument('template_dir')
+    parser.add_argument('--output_dir', default='results')
     parser.add_argument('--use_cuda', action='store_true')
     parser.add_argument('--use_cython', action='store_true')
     args = parser.parse_args()
@@ -57,29 +66,50 @@ if __name__ == '__main__':
         )
     ])
     
-    raw_image = cv2.imread(args.image_path)[..., ::-1]
-    image = image_transform(raw_image.copy()).unsqueeze(0)
-
-    raw_template = cv2.imread(args.template_path)[..., ::-1]
-    template = image_transform(raw_template.copy()).unsqueeze(0)
-
     vgg_feature = models.vgg13(pretrained=True).features
     FE = FeatureExtractor(vgg_feature, use_cuda=args.use_cuda, padding=True)
-    boxes, centers, scores = FE(
-        template, image, threshold=0.1, use_cython=args.use_cython)
 
-    if len(boxes) == 0:
-        print("no matching")
-        sys.exit()
+    image_paths = []
+    for path in os.listdir(args.image_dir):
+        if is_img(path):
+            image_paths.append(os.path.join(args.image_dir, path))
 
-    d_img = raw_image.astype(np.uint8).copy()
-    nms_res = nms(np.array(boxes), np.array(scores), thresh=0.5)
-    print("detected objects: {}".format(len(nms_res)))
-    for i in nms_res:
-        d_img = cv2.rectangle(d_img, boxes[i][0], boxes[i][1], (255, 0, 0), 3)
-        d_img = cv2.circle(d_img, centers[i], int(
-            (boxes[i][1][0] - boxes[i][0][0])*0.2), (0, 0, 255), 2)
+    template_paths = []
+    for path in os.listdir(args.template_dir):
+        if is_img(path):
+            template_paths.append(os.path.join(args.template_dir, path))
+
+    print(image_paths)
+    print(template_paths)
+
+    for image_path in image_paths:
+        score_map = {}
+        raw_image = cv2.imread(image_path)[..., ::-1]
+        image = image_transform(raw_image.copy()).unsqueeze(0)
+
+        for template_path in template_paths:
+            raw_template = cv2.imread(template_path)[..., ::-1]
+            template = image_transform(raw_template.copy()).unsqueeze(0)
+
+            boxes, centers, scores = FE(
+                template, image, threshold=0.1, use_cython=args.use_cython)
+            score_map[template_path] = [boxes, centers, scores]
+
+        best_matches = get_best_match_templates(score_map)
+        print('{} matches {}'.format(image_path, best_matches))
+
+        boxes = best_matches['boxes']
+        scores = best_matches['scores']
+        if len(boxes) == 0:
+            continue
+
+        d_img = raw_image.astype(np.uint8).copy()
+        nms_res = nms(np.array(boxes), np.array(scores), thresh=0.5)
+        print("detected objects: {}".format(len(nms_res)))
+        for i in nms_res:
+            d_img = cv2.rectangle(d_img, boxes[i][0], boxes[i][1], (255, 0, 0), 3)
+            # d_img = cv2.circle(d_img, centers[i], int(
+            #     (boxes[i][1][0] - boxes[i][0][0])*0.2), (0, 0, 255), 2)
+            
+        cv2.imwrite(os.path.join(args.output_dir, os.path.basename(image_path)), d_img[..., ::-1])
         
-    if cv2.imwrite("result.png", d_img[..., ::-1]):
-        print("result.png was generated")
-    
