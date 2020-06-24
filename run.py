@@ -92,7 +92,7 @@ class Evaluator:
         recall = recall / n_all * 100
 
         if is_log:
-            self.config.logger.debug('accuracy: {}, precision: {}, recall: {}'.format(accuracy, precision, recall))
+            self.config.logger.info('accuracy: {}, precision: {}, recall: {}'.format(accuracy, precision, recall))
 
             with open(os.path.join(self.config.output_dir, 'result.txt'), 'w') as f:
                 for image_path, template_label in result.items():
