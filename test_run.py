@@ -36,8 +36,19 @@ class TestRun(unittest.TestCase):
 
     def test_output_result(self):
         data = {
-            'aaa/template0@111.png': ['aaa/template0.png', 'aaa/template1.png'],
-            'aaa/template2@template3@111.png': ['aaa/template2.png', 'aaa/template3.png'],
+            'aaa/label0@aeara.png': ['aaa/label0.png', 'aaa/label1.png'],
+            'aaa/label2@label3@aegq.png': ['aaa/label2.png', 'aaa/label3.png'],
         }
-        accuracy = self.instance.output_result(data, False)
+        accuracy, precision, recall = self.instance.output_result(data, False)
         self.assertEqual(int(accuracy), 75)
+        self.assertEqual(int(precision), 75)
+        self.assertEqual(int(recall), 100)
+
+        data = {
+            'aaa/none@wefwe.png': ['none.png'],
+            'aaa/none@ewwgb.png': ['aaa/label0.png', 'aaa/label1.png'],
+        }
+        accuracy, precision, recall = self.instance.output_result(data, False)
+        self.assertEqual(int(accuracy), 50)
+        self.assertEqual(int(precision), 50)
+        self.assertEqual(int(recall), 50)

@@ -71,27 +71,30 @@ class Evaluator:
         # return {'label': labels[0], 'boxes': entry[0], 'scores': entry[2]}
 
     def output_result(self, result, is_log=True):
-        n_all = 0
-        n_correct = 0
+        n_all = accuracy = precision = recall = 0
 
         for image_path, template_paths in result.items():
-            image_labels = self.extract_labels(image_path)
-            template_labels = [self.extract_labels(path, True)[0] for path in template_paths]
-            n_all += len(template_labels)
-            for label in template_labels:
-                if label in image_labels:
-                    n_correct += 1
+            n_all += 1
+            image_labels = set(self.extract_labels(image_path))
+            template_labels = set([self.extract_labels(path, True)[0] for path in template_paths])
+            inter = image_labels & template_labels
+            union = image_labels | template_labels
+            accuracy += len(inter) / len(union)
+            precision += len(inter) / len(template_labels)
+            recall += len(inter) / len(image_labels)
 
-        accuracy = n_correct / n_all * 100
+        accuracy = accuracy / n_all * 100
+        precision = precision / n_all * 100
+        recall = recall / n_all * 100
 
         if is_log:
-            logging.debug('accuracy: {}'.format(accuracy))
+            logging.debug('accuracy: {}, precision: {}, recall: {}'.format(accuracy, precision, recall))
 
             with open(os.path.join(self.config.output_dir, 'result.txt'), 'w') as f:
                 for image_path, template_label in result.items():
                     f.write('{}\t{}\n'.format(str(image_path), template_label))
 
-        return accuracy
+        return accuracy, precision, recall
 
     def execute(self):
         image_transform = transforms.Compose([
