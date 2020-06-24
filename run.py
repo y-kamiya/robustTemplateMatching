@@ -92,7 +92,7 @@ class Evaluator:
         recall = recall / n_all * 100
 
         if is_log:
-            logging.debug('accuracy: {}, precision: {}, recall: {}'.format(accuracy, precision, recall))
+            self.config.logger.debug('accuracy: {}, precision: {}, recall: {}'.format(accuracy, precision, recall))
 
             with open(os.path.join(self.config.output_dir, 'result.txt'), 'w') as f:
                 for image_path, template_label in result.items():
@@ -110,7 +110,7 @@ class Evaluator:
         ])
         
         vgg_feature = models.vgg13(pretrained=True).features
-        FE = FeatureExtractor(vgg_feature, use_cuda=self.config.use_cuda, padding=True)
+        FE = FeatureExtractor(self.config, vgg_feature, use_cuda=self.config.use_cuda, padding=True)
 
         image_paths = []
         for path in os.listdir(self.config.image_dir):
@@ -122,8 +122,8 @@ class Evaluator:
             if self.is_img(path):
                 template_paths.append(os.path.join(self.config.template_dir, path))
 
-        logging.debug(image_paths)
-        logging.debug(template_paths)
+        self.config.logger.debug(image_paths)
+        self.config.logger.debug(template_paths)
 
         result = {}
         for image_path in image_paths:
@@ -140,18 +140,18 @@ class Evaluator:
 
                 # 複数返す場合は重複削除処理
                 # indexes = self.nms(boxes, scores, thresh=0.5)
-                # logging.debug("detected objects: {}".format(len(indexes)))
+                # self.config.logger.debug("detected objects: {}".format(len(indexes)))
                 # score_map[template_path] = [boxes[indexes], scores[indexes]]
 
                 if self.SCORE_THRESHOLD <= scores[0]:
                     score_map[template_path] = [boxes, scores]
 
-                logging.info('{:.2f}\t{:.4}\t{}\t{}'.format(time.time() - start_time, scores[0], template_path, image_path))
+                self.config.logger.info('{:.2f}\t{:.4}\t{}\t{}'.format(time.time() - start_time, scores[0], template_path, image_path))
 
             FE.remove_cache(image_path)
 
             matched_entries = self.get_matched_templates(score_map, 2)
-            logging.debug('{} matches {}'.format(image_path, matched_entries))
+            self.config.logger.debug('{} matches {}'.format(image_path, matched_entries))
 
             if len(matched_entries) == 0:
                 continue
@@ -177,9 +177,17 @@ if __name__ == '__main__':
     parser.add_argument('--use_cuda', action='store_true')
     parser.add_argument('--use_cython', action='store_true')
     parser.add_argument('--loglevel', default='INFO')
+    parser.add_argument('--logfile', default=None)
     args = parser.parse_args()
 
     logging.basicConfig(level=getattr(logging, args.loglevel))
+
+    logger = logging.getLogger('default')
+    args.logger = logger
+    if args.logfile is not None:
+        handler = logging.FileHandler(args.logfile)
+        handler.setLevel(getattr(logging, args.loglevel))
+        logger.addHandler(handler)
 
     evaluator = Evaluator(args)
     evaluator.execute()

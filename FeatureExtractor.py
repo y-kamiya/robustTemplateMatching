@@ -10,7 +10,8 @@ import copy
 import logging
 
 class FeatureExtractor():
-    def __init__(self, model, use_cuda=True, padding=True):
+    def __init__(self, config, model, use_cuda=True, padding=True):
+        self.config = config
         self.model = copy.deepcopy(model)
         self.model = self.model.eval()
         self.use_cuda = use_cuda
@@ -93,7 +94,7 @@ class FeatureExtractor():
         if template_path not in self.cache:
             self.cache[template_path] = {}
 
-        logging.debug("save features...")
+        self.config.logger.debug("save features...")
 
         if self.l_star not in self.cache[template_path]:
             # save template feature map (named F in paper)
@@ -119,7 +120,7 @@ class FeatureExtractor():
             self.template_feature_map = self.template_feature_map.cpu()
             self.image_feature_map = self.image_feature_map.cpu()
 
-        logging.debug("calc NCC...")
+        self.config.logger.debug("calc NCC...")
         # calc NCC
         F = self.template_feature_map.numpy()[0].astype(np.float32)
         M = self.image_feature_map.numpy()[0].astype(np.float32)
@@ -143,7 +144,7 @@ class FeatureExtractor():
         # 最もスコアの高いものを一つだけ返す
         # 一つのsearch画像内に同じtemplate画像が複数出てくることは今回の用途ではないため
         max_indices = np.array([np.unravel_index(np.argmax(self.NCC), self.NCC.shape)])
-        logging.debug("detected boxes: {}".format(len(max_indices)))
+        self.config.logger.debug("detected boxes: {}".format(len(max_indices)))
 
         boxes = []
         centers = []
