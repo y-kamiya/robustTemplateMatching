@@ -1,4 +1,5 @@
 import os
+import time
 import copy
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,6 +12,7 @@ import torch
 import argparse
 from FeatureExtractor import FeatureExtractor
 import sys
+import logging
 
 class Evaluator:
     def __init__(self, config):
@@ -83,7 +85,7 @@ class Evaluator:
         accuracy = n_correct / n_all * 100
 
         if is_log:
-            print('accuracy: {}'.format(accuracy))
+            logging.debug('accuracy: {}'.format(accuracy))
 
             with open(os.path.join(self.config.output_dir, 'result.txt'), 'w') as f:
                 for image_path, template_label in result.items():
@@ -113,8 +115,8 @@ class Evaluator:
             if self.is_img(path):
                 template_paths.append(os.path.join(self.config.template_dir, path))
 
-        print(image_paths)
-        print(template_paths)
+        logging.debug(image_paths)
+        logging.debug(template_paths)
 
         result = {}
         for image_path in image_paths:
@@ -123,20 +125,23 @@ class Evaluator:
             image = image_transform(raw_image.copy()).unsqueeze(0)
 
             for template_path in template_paths:
+                start_time = time.time()
                 raw_template = cv2.imread(template_path)[..., ::-1]
                 template = image_transform(raw_template.copy()).unsqueeze(0)
 
                 boxes, scores = FE(template_path, template, image_path, image, use_cython=self.config.use_cython)
 
                 indexes = self.nms(boxes, scores, thresh=0.5)
-                print("detected objects: {}".format(len(indexes)))
+                logging.debug("detected objects: {}".format(len(indexes)))
 
                 score_map[template_path] = [boxes[indexes], scores[indexes]]
+
+                logging.info('{:.2f}\t{:.4}\t{}\t{}'.format(time.time() - start_time, scores[0], template_path, image_path))
 
             FE.remove_cache(image_path)
 
             matched_entries = self.get_matched_templates(score_map, 2)
-            print('{} matches {}'.format(image_path, matched_entries))
+            logging.debug('{} matches {}'.format(image_path, matched_entries))
 
             if len(matched_entries) == 0:
                 continue
@@ -161,7 +166,10 @@ if __name__ == '__main__':
     parser.add_argument('--output_dir', default='results')
     parser.add_argument('--use_cuda', action='store_true')
     parser.add_argument('--use_cython', action='store_true')
+    parser.add_argument('--loglevel', default='INFO')
     args = parser.parse_args()
+
+    logging.basicConfig(level=getattr(logging, args.loglevel))
 
     evaluator = Evaluator(args)
     evaluator.execute()

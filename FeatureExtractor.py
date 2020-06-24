@@ -7,6 +7,7 @@ import torchvision
 from torchvision import models, transforms, utils
 import numpy as np
 import copy
+import logging
 
 class FeatureExtractor():
     def __init__(self, model, use_cuda=True, padding=True):
@@ -92,7 +93,7 @@ class FeatureExtractor():
         if template_path not in self.cache:
             self.cache[template_path] = {}
 
-        print("save features...")
+        logging.debug("save features...")
 
         if self.l_star not in self.cache[template_path]:
             # save template feature map (named F in paper)
@@ -118,7 +119,7 @@ class FeatureExtractor():
             self.template_feature_map = self.template_feature_map.cpu()
             self.image_feature_map = self.image_feature_map.cpu()
 
-        print("calc NCC...")
+        logging.debug("calc NCC...")
         # calc NCC
         F = self.template_feature_map.numpy()[0].astype(np.float32)
         M = self.image_feature_map.numpy()[0].astype(np.float32)
@@ -139,7 +140,7 @@ class FeatureExtractor():
             threshold = 0.95 * np.max(self.NCC)
         # max_indices = np.array(np.where(self.NCC > threshold)).T
         max_indices = np.array([np.unravel_index(np.argmax(self.NCC), self.NCC.shape)])
-        print("detected boxes: {}".format(len(max_indices)))
+        logging.debug("detected boxes: {}".format(len(max_indices)))
 
         boxes = []
         centers = []
@@ -184,7 +185,6 @@ class FeatureExtractor():
             boxes.append([(x1, y1), (x2, y2)])
             # centers.append((x_center, y_center))
             scores.append(np.average(NCC_part))
-            print(scores)
 
         return np.array(boxes), np.array(scores)
         # return boxes, centers, scores
