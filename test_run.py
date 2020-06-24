@@ -34,6 +34,12 @@ class TestRun(unittest.TestCase):
         self.assertEqual(result[1][0], 'aaa/bbb.png')
         self.assertEqual(result[1][2], 2.0)
 
+    def test_get_matched_templates_none(self):
+        score_map = {
+        }
+        result = self.instance.get_matched_templates(score_map, 2)
+        self.assertEqual(result[0][0], 'none.png')
+
     def test_output_result(self):
         data = {
             'aaa/label0@aeara.png': ['aaa/label0.png', 'aaa/label1.png'],

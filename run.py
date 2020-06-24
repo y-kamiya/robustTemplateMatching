@@ -15,6 +15,8 @@ import sys
 import logging
 
 class Evaluator:
+    SCORE_THRESHOLD = 0.3
+
     def __init__(self, config):
         self.config = config
 
@@ -65,6 +67,8 @@ class Evaluator:
                 entry_all.append((template_path, entry[0][i], entry[1][i]))
 
         sorted_entries = sorted(entry_all, key=lambda x:-x[2])[:n_top]
+        if len(sorted_entries) <= 0:
+            sorted_entries.append(('none.png', [[0,0],[0,0]], [0.0]))
 
         return sorted_entries
         # labels = self.extract_labels(template_path, True)
@@ -134,10 +138,13 @@ class Evaluator:
 
                 boxes, scores = FE(template_path, template, image_path, image, use_cython=self.config.use_cython)
 
-                indexes = self.nms(boxes, scores, thresh=0.5)
-                logging.debug("detected objects: {}".format(len(indexes)))
+                # 複数返す場合は重複削除処理
+                # indexes = self.nms(boxes, scores, thresh=0.5)
+                # logging.debug("detected objects: {}".format(len(indexes)))
+                # score_map[template_path] = [boxes[indexes], scores[indexes]]
 
-                score_map[template_path] = [boxes[indexes], scores[indexes]]
+                if self.SCORE_THRESHOLD <= scores[0]:
+                    score_map[template_path] = [boxes, scores]
 
                 logging.info('{:.2f}\t{:.4}\t{}\t{}'.format(time.time() - start_time, scores[0], template_path, image_path))
 

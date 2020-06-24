@@ -136,9 +136,12 @@ class FeatureExtractor():
             self.NCC = self.calc_NCC(
                 self.template_feature_map.numpy(), self.image_feature_map.numpy())
 
-        if threshold is None:
-            threshold = 0.95 * np.max(self.NCC)
+        # if threshold is None:
+        #     threshold = 0.95 * np.max(self.NCC)
         # max_indices = np.array(np.where(self.NCC > threshold)).T
+
+        # 最もスコアの高いものを一つだけ返す
+        # 一つのsearch画像内に同じtemplate画像が複数出てくることは今回の用途ではないため
         max_indices = np.array([np.unravel_index(np.argmax(self.NCC), self.NCC.shape)])
         logging.debug("detected boxes: {}".format(len(max_indices)))
 
