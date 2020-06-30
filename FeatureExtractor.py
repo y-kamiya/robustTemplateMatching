@@ -8,6 +8,8 @@ from torchvision import models, transforms, utils
 import numpy as np
 import copy
 import logging
+import sys
+import time
 
 class FeatureExtractor():
     def __init__(self, config, model, use_cuda=True, padding=True):
@@ -70,13 +72,23 @@ class FeatureExtractor():
     
     def calc_NCC(self, F, M):
         c, h_f, w_f = F.shape[-3:]
-        tmp = np.zeros((c, M.shape[-2] - h_f, M.shape[-1] - w_f, h_f, w_f))
+        norm_f = F.norm()
+
+        self.config.logger.debug("image feature map: {}".format(M.shape))
+        self.config.logger.debug("template feature map: {}".format(F.shape))
+
+        stime = time.time()
+        ncc = torch.empty((M.shape[-2] - h_f, M.shape[-1] - w_f))
+        if self.use_cuda:
+            ncc = ncc.cuda()
+
         for i in range(M.shape[-2] - h_f):
             for j in range(M.shape[-1] - w_f):
-                M_tilde = M[:, :, i:i+h_f, j:j+w_f][:, None, None, :, :]
-                tmp[:, i, j, :, :] = M_tilde / np.linalg.norm(M_tilde)
-        NCC = np.sum(tmp*F.reshape(F.shape[-3], 1, 1, F.shape[-2], F.shape[-1]), axis=(0, 3, 4))
-        return NCC
+                M_tilde = M[:, :, i:i+h_f, j:j+w_f]
+                ncc[i, j] = torch.sum(F * M_tilde / (M_tilde.norm() * norm_f))
+
+        self.config.logger.debug('time of calc NCC: {}'.format(time.time() - stime))
+        return ncc
 
     def remove_cache(self, image_path):
         del self.cache[image_path]
@@ -116,16 +128,11 @@ class FeatureExtractor():
         else:
             self.image_feature_map = self.cache[image_path][self.l_star]
 
-        if self.use_cuda:
-            self.template_feature_map = self.template_feature_map.cpu()
-            self.image_feature_map = self.image_feature_map.cpu()
-
         self.config.logger.debug("calc NCC...")
-        # calc NCC
-        F = self.template_feature_map.numpy()[0].astype(np.float32)
-        M = self.image_feature_map.numpy()[0].astype(np.float32)
 
         if use_cython:
+            F = self.template_feature_map.cpu().numpy()[0].astype(np.float32)
+            M = self.image_feature_map.cpu().numpy()[0].astype(np.float32)
             import cython_files.cython_calc_NCC as cython_calc_NCC
             self.NCC = np.zeros(
                 (M.shape[1] - F.shape[1]) * (M.shape[2] - F.shape[2])).astype(np.float32)
@@ -134,8 +141,7 @@ class FeatureExtractor():
             self.NCC = self.NCC.reshape(
                 [M.shape[1] - F.shape[1], M.shape[2] - F.shape[2]])
         else:
-            self.NCC = self.calc_NCC(
-                self.template_feature_map.numpy(), self.image_feature_map.numpy())
+            self.NCC = self.calc_NCC(self.template_feature_map, self.image_feature_map).cpu().numpy()
 
         # if threshold is None:
         #     threshold = 0.95 * np.max(self.NCC)
@@ -145,6 +151,8 @@ class FeatureExtractor():
         # 一つのsearch画像内に同じtemplate画像が複数出てくることは今回の用途ではないため
         max_indices = np.array([np.unravel_index(np.argmax(self.NCC), self.NCC.shape)])
         self.config.logger.debug("detected boxes: {}".format(len(max_indices)))
+
+        size_template_feature = self.template_feature_map.size()
 
         boxes = []
         centers = []
@@ -157,9 +165,9 @@ class FeatureExtractor():
             j_min = max(0, j_star-2)
             NCC_part = self.NCC[i_min:i_star+2, j_min:j_star+2]
 
-            x_center = (j_star + self.template_feature_map.size()
+            x_center = (j_star + size_template_feature
                         [-1]/2) * image.size()[-1] // self.image_feature_map.size()[-1]
-            y_center = (i_star + self.template_feature_map.size()
+            y_center = (i_star + size_template_feature
                         [-2]/2) * image.size()[-2] // self.image_feature_map.size()[-2]
 
             x1_0 = x_center - template.size()[-1]/2
