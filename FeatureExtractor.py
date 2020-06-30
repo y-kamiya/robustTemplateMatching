@@ -12,15 +12,11 @@ import sys
 import time
 
 class FeatureExtractor():
-    def __init__(self, config, model, use_cuda=True, padding=True):
+    def __init__(self, config, model, padding=True):
         self.config = config
-        self.model = copy.deepcopy(model)
+        self.model = copy.deepcopy(model).to(config.device)
         self.model = self.model.eval()
-        self.use_cuda = use_cuda
         self.feature_maps = []
-
-        if self.use_cuda:
-            self.model = self.model.cuda()
 
         self.index = []
         self.f = []
@@ -78,9 +74,7 @@ class FeatureExtractor():
         self.config.logger.debug("template feature map: {}".format(F.shape))
 
         stime = time.time()
-        ncc = torch.empty((M.shape[-2] - h_f, M.shape[-1] - w_f))
-        if self.use_cuda:
-            ncc = ncc.cuda()
+        ncc = torch.empty((M.shape[-2] - h_f, M.shape[-1] - w_f)).to(self.config.device)
 
         for i in range(M.shape[-2] - h_f):
             for j in range(M.shape[-1] - w_f):
@@ -94,9 +88,8 @@ class FeatureExtractor():
         del self.cache[image_path]
 
     def __call__(self, template_path, template, image_path, image, threshold=None, use_cython=True):
-        if self.use_cuda:
-            template = template.cuda()
-            image = image.cuda()
+        template = template.to(self.config.device)
+        image = image.to(self.config.device)
 
         self.l_star = self.calc_l_star(template)
 

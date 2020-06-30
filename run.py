@@ -110,7 +110,7 @@ class Evaluator:
         ])
         
         vgg_feature = models.vgg13(pretrained=True).features
-        FE = FeatureExtractor(self.config, vgg_feature, use_cuda=self.config.use_cuda, padding=True)
+        FE = FeatureExtractor(self.config, vgg_feature, padding=True)
 
         image_paths = []
         for path in os.listdir(self.config.image_dir):
@@ -174,11 +174,15 @@ if __name__ == '__main__':
     parser.add_argument('image_dir')
     parser.add_argument('template_dir')
     parser.add_argument('--output_dir', default='results')
-    parser.add_argument('--use_cuda', action='store_true')
     parser.add_argument('--use_cython', action='store_true')
+    parser.add_argument('--cpu', action='store_true')
     parser.add_argument('--loglevel', default='INFO')
     parser.add_argument('--logfile', default=None)
     args = parser.parse_args()
+
+    is_cpu = args.cpu or not torch.cuda.is_available()
+    args.device_name = "cpu" if is_cpu else "cuda"
+    args.device = torch.device(args.device_name)
 
     logging.basicConfig(level=getattr(logging, args.loglevel))
 
