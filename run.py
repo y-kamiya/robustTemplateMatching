@@ -165,6 +165,7 @@ class Evaluator:
                 result[image_path].append(entry[0])
                 
             cv2.imwrite(os.path.join(self.config.output_dir, os.path.basename(image_path)), d_img[..., ::-1])
+            self.config.logger.info('result: {}\t{}'.format(image_path, result[image_path]))
             
 
         self.output_result(result)
