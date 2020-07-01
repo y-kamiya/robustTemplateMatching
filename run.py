@@ -140,6 +140,7 @@ class Evaluator:
                 start_time = time.time()
                 raw_template = cv2.imread(template_path)[..., ::-1]
                 template = image_transform(raw_template.copy()).unsqueeze(0)
+                template_name = os.path.basename(template_path)
 
                 boxes, scores = FE(template_path, template, image_path, image, use_cython=self.config.use_cython)
 
@@ -149,9 +150,9 @@ class Evaluator:
                 # score_map[template_path] = [boxes[indexes], scores[indexes]]
 
                 if self.config.score_threshold <= scores[0]:
-                    score_map[os.path.basename(template_path)] = [boxes, scores]
+                    score_map[template_name] = [boxes, scores]
 
-                self.config.logger.info('{:.2f}\t{:.4}\t{}\t{}'.format(time.time() - start_time, scores[0], template_path, image_name))
+                self.config.logger.info('{:.2f}\t{:.4}\t{}\t{}'.format(time.time() - start_time, scores[0], template_name, image_name))
 
             FE.remove_cache(image_path)
 
