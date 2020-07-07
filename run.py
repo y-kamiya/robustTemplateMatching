@@ -1,3 +1,4 @@
+# coding: UTF-8
 import os
 import time
 import copy
@@ -13,6 +14,7 @@ import argparse
 from FeatureExtractor import FeatureExtractor
 import sys
 import logging
+import ast
 
 class Evaluator:
     def __init__(self, config):
@@ -56,7 +58,11 @@ class Evaluator:
         if is_template:
             return [name]
 
-        return name.split('@')[:-1]
+        splited = name.split('@')
+        if 1 < len(splited):
+            return splited[:-1]
+
+        return [name]
 
     def get_matched_templates(self, score_map, n_top, image_path):
         entry_all = []
@@ -75,6 +81,17 @@ class Evaluator:
         return sorted_entries
         # labels = self.extract_labels(name, True)
         # return {'label': labels[0], 'boxes': entry[0], 'scores': entry[2]}
+
+    def summary_result(self, path):
+        with open(path, 'r') as f:
+            lines = [line.strip().split('\t') for line in f.readlines()]
+            result = {}
+            for line in lines:
+                key = line[0]
+                values = ast.literal_eval(line[1])
+                result[key] = values
+
+        self.output_result(result)
 
     def output_result(self, result, is_log=True):
         n_all = accuracy = precision = recall = 0
@@ -186,6 +203,7 @@ if __name__ == '__main__':
     parser.add_argument('--loglevel', default='INFO')
     parser.add_argument('--logfile', default=None)
     parser.add_argument('--score_threshold', type=float, default=0.3)
+    parser.add_argument('--summary_result', default=None)
     args = parser.parse_args()
 
     is_cpu = args.cpu or not torch.cuda.is_available()
@@ -204,4 +222,9 @@ if __name__ == '__main__':
     logger.info(args)
 
     evaluator = Evaluator(args)
+
+    if args.summary_result is not None:
+        evaluator.summary_result(args.summary_result)
+        sys.exit()
+
     evaluator.execute()
