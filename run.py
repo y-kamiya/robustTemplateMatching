@@ -96,6 +96,7 @@ class Evaluator:
     def output_result(self, result, is_log=True):
         n_all = accuracy = precision = recall = 0
 
+        wrongs = []
         for image_path, template_paths in result.items():
             n_all += 1
             image_labels = set(self.extract_labels(image_path))
@@ -105,6 +106,8 @@ class Evaluator:
             accuracy += len(inter) / len(union)
             precision += len(inter) / len(template_labels)
             recall += len(inter) / len(image_labels)
+            if len(image_labels) != len(template_labels) or len(image_labels) != len(inter):
+                wrongs.append((image_path, template_paths))
 
         accuracy = accuracy / n_all * 100
         precision = precision / n_all * 100
@@ -116,6 +119,10 @@ class Evaluator:
             with open(os.path.join(self.config.output_dir, 'result.txt'), 'w') as f:
                 for image_path, template_label in result.items():
                     f.write('{}\t{}\n'.format(str(image_path), template_label))
+                f.write('\n=========================================\n')
+                f.write('wrongs\n')
+                for image_path, template_paths in wrongs:
+                    f.write('{}\t{}\n'.format(str(image_path), str(template_paths)))
 
         return accuracy, precision, recall
 
