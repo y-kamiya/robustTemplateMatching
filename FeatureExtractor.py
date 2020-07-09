@@ -2,7 +2,7 @@ import cv2
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+import torch.nn.functional as func
 import torchvision
 from torchvision import models, transforms, utils
 import numpy as np
@@ -74,10 +74,12 @@ class FeatureExtractor():
         self.config.logger.debug("template feature map: {}".format(F.shape))
 
         stime = time.time()
-        ncc = torch.empty((M.shape[-2] - h_f, M.shape[-1] - w_f)).to(self.config.device)
+        h_diff = M.shape[-2] - h_f + 1
+        w_diff = M.shape[-1] - w_f + 1
+        ncc = torch.empty((h_diff, w_diff)).to(self.config.device)
 
-        for i in range(M.shape[-2] - h_f):
-            for j in range(M.shape[-1] - w_f):
+        for i in range(h_diff):
+            for j in range(w_diff):
                 M_tilde = M[:, :, i:i+h_f, j:j+w_f]
                 ncc[i, j] = torch.sum(F * M_tilde / (M_tilde.norm() * norm_f))
 
@@ -120,6 +122,15 @@ class FeatureExtractor():
             self.cache[image_path][self.l_star] = self.image_feature_map
         else:
             self.image_feature_map = self.cache[image_path][self.l_star]
+
+        h_t, w_t = self.template_feature_map.shape[-2:]
+        h_i, w_i = self.image_feature_map.shape[-2:]
+        size = [h_t, w_t]
+        if h_i < h_t:
+            size[0] = h_i
+        if w_i < w_t:
+            size[1] = w_i
+        self.template_feature_map = func.interpolate(self.template_feature_map, size=size, mode='bilinear', align_corners=True)
 
         self.config.logger.debug("calc NCC...")
 
