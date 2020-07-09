@@ -61,7 +61,7 @@ class FeatureExtractor():
                 res *= x
             return res
 
-    def calc_l_star(self, template, k=3):
+    def calc_l_star(self, template, k):
         l = np.sum(self.rf <= min(list(template.size()[-2:]))) - 1
         l_star = max(l - k, 1)
         return l_star
@@ -93,7 +93,7 @@ class FeatureExtractor():
         template = template.to(self.config.device)
         image = image.to(self.config.device)
 
-        self.l_star = self.calc_l_star(template)
+        self.l_star = self.calc_l_star(template, self.config.klayer)
 
         if image_path not in self.cache:
             self.cache[image_path] = {}

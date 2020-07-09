@@ -212,6 +212,7 @@ if __name__ == '__main__':
     parser.add_argument('--score_threshold', type=float, default=0.3)
     parser.add_argument('--summary_result', default=None)
     parser.add_argument('--ntop', type=int, default=2)
+    parser.add_argument('--klayer', type=int, default=3)
     args = parser.parse_args()
 
     is_cpu = args.cpu or not torch.cuda.is_available()
