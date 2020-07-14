@@ -114,7 +114,8 @@ class Evaluator:
         recall = recall / n_all * 100
 
         if is_log:
-            self.config.logger.info('accuracy: {}, precision: {}, recall: {}'.format(accuracy, precision, recall))
+            text_result = 'accuracy: {:.2f}, precision: {:.2f}, recall: {:.2f}'.format(accuracy, precision, recall)
+            self.config.logger.info(text_result)
 
             with open(os.path.join(self.config.output_dir, 'result.txt'), 'w') as f:
                 for image_path, template_label in result.items():
@@ -123,6 +124,9 @@ class Evaluator:
                 f.write('wrongs\n')
                 for image_path, template_paths in wrongs:
                     f.write('{}\t{}\n'.format(str(image_path), str(template_paths)))
+
+                f.write('\n=========================================\n')
+                f.write(text_result)
 
         return accuracy, precision, recall
 
