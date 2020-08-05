@@ -13,6 +13,7 @@ from FeatureExtractor import FeatureExtractor
 import sys
 import logging
 import ast
+import json
 
 class ImageDataset(Dataset):
     IMG_EXTENSIONS = ['.png', 'jpg']
@@ -152,13 +153,20 @@ class Evaluator:
             lines = [line.strip().split('\t') for line in f.readlines()]
             result = {}
             for line in lines:
+                # parse until empty line
+                if len(line) <= 1:
+                    break
+                print(line)
                 key = line[0]
                 values = ast.literal_eval(line[1])
                 result[key] = values
 
-        self.output_result(result)
+        if self.config.predict:
+            self.output_predict_result(result)
+        else:
+            self.output_eval_result(result)
 
-    def output_result(self, result, is_log=True):
+    def output_eval_result(self, result, is_log=True):
         n_all = accuracy = precision = recall = 0
 
         wrongs = []
@@ -194,6 +202,17 @@ class Evaluator:
                 f.write(text_result)
 
         return accuracy, precision, recall
+
+    def output_predict_result(self, result):
+        result_by_template = {}
+        for image_path, template_paths in result.items():
+            for template_path in template_paths:
+                if template_path not in result_by_template:
+                    result_by_template[template_path] = []
+                result_by_template[template_path].append(image_path)
+
+        with open(os.path.join(self.config.output_dir, 'result.txt'), 'w') as f:
+            f.write(json.dumps(result_by_template))
 
     def execute(self):
         vgg_feature = models.vgg13(pretrained=True).features
@@ -248,12 +267,16 @@ class Evaluator:
             logger.info('result: {}\t{}'.format(image_path, result[image_path]))
             
 
-        self.output_result(result)
+        if self.config.predict:
+            self.output_predict_result(result)
+        else:
+            self.output_eval_result(result)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='robust template matching using CNN')
     parser.add_argument('search_dir')
     parser.add_argument('template_dir')
+    parser.add_argument('--predict', action='store_true')
     parser.add_argument('--output_dir', default='results')
     parser.add_argument('--cpu', action='store_true')
     parser.add_argument('--loglevel', default='INFO')
