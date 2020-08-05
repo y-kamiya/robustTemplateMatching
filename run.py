@@ -1,20 +1,87 @@
 # coding: UTF-8
 import os
 import time
-import copy
-import matplotlib.pyplot as plt
 import numpy as np
 import cv2
 from torchvision import models, transforms, utils
-import torchvision
 import torch.nn.functional as F
 import torch.nn as nn
 import torch
+from torch.utils.data import Dataset, DataLoader
 import argparse
 from FeatureExtractor import FeatureExtractor
 import sys
 import logging
 import ast
+
+class ImageDataset(Dataset):
+    IMG_EXTENSIONS = ['.png', 'jpg']
+
+    def __init__(self, image_dir, logger):
+        self.logger = logger
+        self.paths = []
+        self.cache = {}
+
+        if os.path.isdir(image_dir):
+            for file in os.listdir(image_dir):
+                if self.is_img(file):
+                    self.paths.append(os.path.join(image_dir, file))
+
+        elif os.path.isfile(image_dir):
+            with open(image_dir) as f:
+                self.paths = [row.strip() for row in f.readlines()]
+
+        else:
+            assert False, 'need directory path containing images or file path containing image path list'
+
+        self.paths.sort()
+
+        self.__validate()
+
+    def is_img(self, fname):
+        return any(fname.endswith(ext) for ext in self.IMG_EXTENSIONS)
+
+    def __validate(self):
+        wrong_paths = []
+        for path in self.paths:
+            if not os.path.isfile(path):
+                wrong_paths.append(path)
+
+        if wrong_paths:
+            self.logger.warning('!!!!!!!!!!!!! images do not exist !!!!!!!!!!!!!')
+            self.logger.warning(wrong_paths)
+
+    def __transform(self, w, h):
+        return transforms.Compose([
+            transforms.ToPILImage(),
+            transforms.Resize((h, w)),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225],
+            )
+        ])
+
+    def __image_name(self, path):
+        return os.path.basename(path)
+
+    def __getitem__(self, index):
+        path = self.paths[index]
+        name = self.__image_name(path)
+
+        if index not in self.cache:
+            img = cv2.imread(path)[..., ::-1]
+            h, w, _ = img.shape
+
+            transform = self.__transform(w, h)
+            image = transform(img)
+
+            self.cache[index] = image
+
+        return {'image': self.cache[index], 'path': path}
+
+    def __len__(self):
+        return len(self.paths)
 
 class Evaluator:
     def __init__(self, config):
@@ -48,10 +115,6 @@ class Evaluator:
 
         return keep
         
-    def is_img(self, path):
-        _, ext = os.path.splitext(path)
-        return ext in ['.png', '.jpg']
-
     def extract_labels(self, path, is_template=False):
         filename = os.path.basename(path)
         name, _ = os.path.splitext(filename)
@@ -131,75 +194,56 @@ class Evaluator:
         return accuracy, precision, recall
 
     def execute(self):
-        image_transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize(
-                mean=[0.485, 0.456, 0.406],
-                std=[0.229, 0.224, 0.225],
-            )
-        ])
-        
         vgg_feature = models.vgg13(pretrained=True).features
         FE = FeatureExtractor(self.config, vgg_feature, padding=True)
 
-        image_paths = []
-        for path in os.listdir(self.config.search_dir):
-            if self.is_img(path):
-                image_paths.append(os.path.join(self.config.search_dir, path))
+        dataset_search = ImageDataset(self.config.search_dir, self.config.logger)
+        dataset_template = ImageDataset(self.config.template_dir, self.config.logger)
+        dataloader_search = DataLoader(dataset_search, batch_size=1)
+        dataloader_template = DataLoader(dataset_template, batch_size=1)
 
-        template_paths = []
-        for path in os.listdir(self.config.template_dir):
-            if self.is_img(path):
-                template_paths.append(os.path.join(self.config.template_dir, path))
-
-        image_paths.sort()
-        template_paths.sort()
-        self.config.logger.debug(image_paths)
-        self.config.logger.debug(template_paths)
-
+        logger = self.config.logger
         result = {}
-        for image_path in image_paths:
+        for data_search in dataloader_search:
+            image = data_search['image']
+            image_path = data_search['path'][0]
             score_map = {}
-            raw_image = cv2.imread(image_path)[..., ::-1]
-            image = image_transform(raw_image.copy()).unsqueeze(0)
-            image_name = os.path.basename(image_path)
 
-            for template_path in template_paths:
+            for data_template in dataloader_template:
+                template = data_template['image']
+                template_path = data_template['path'][0]
                 start_time = time.time()
-                raw_template = cv2.imread(template_path)[..., ::-1]
-                template = image_transform(raw_template.copy()).unsqueeze(0)
-                template_name = os.path.basename(template_path)
-
                 boxes, scores = FE(template_path, template, image_path, image)
 
                 # 複数返す場合は重複削除処理
                 # indexes = self.nms(boxes, scores, thresh=0.5)
-                # self.config.logger.debug("detected objects: {}".format(len(indexes)))
+                # logger.debug("detected objects: {}".format(len(indexes)))
                 # score_map[template_path] = [boxes[indexes], scores[indexes]]
 
                 if self.config.score_threshold <= scores[0]:
-                    score_map[template_name] = [boxes, scores]
+                    score_map[template_path] = [boxes, scores]
 
-                self.config.logger.info('{:.2f}\t{:.4}\t{}\t{}'.format(time.time() - start_time, scores[0], template_name, image_name))
+                logger.info('{:.2f}\t{:.4}\t{}\t{}'.format(time.time() - start_time, scores[0], template_path, image_path))
 
             FE.remove_cache(image_path)
 
-            matched_entries = self.get_matched_templates(score_map, self.config.ntop, image_name)
-            self.config.logger.debug('{} matches {}'.format(image_name, matched_entries))
+            matched_entries = self.get_matched_templates(score_map, self.config.ntop, image_path)
+            logger.debug('{} matches {}'.format(image_path, matched_entries))
 
             if len(matched_entries) == 0:
                 continue
 
-            result[image_name] = []
+            result[image_path] = []
+            raw_image = cv2.imread(image_path)[..., ::-1]
             d_img = raw_image.astype(np.uint8).copy()
             for entry in matched_entries:
                 box = entry[1]
                 d_img = cv2.rectangle(d_img, (box[0][0],box[0][1]), (box[1][0],box[1][1]), (255, 0, 0), 3)
 
-                result[image_name].append(entry[0])
+                result[image_path].append(entry[0])
                 
-            cv2.imwrite(os.path.join(self.config.output_dir, image_name), d_img[..., ::-1])
-            self.config.logger.info('result: {}\t{}'.format(image_name, result[image_name]))
+            cv2.imwrite(os.path.join(self.config.output_dir, os.path.basename(image_path)), d_img[..., ::-1])
+            logger.info('result: {}\t{}'.format(image_path, result[image_path]))
             
 
         self.output_result(result)
