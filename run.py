@@ -170,7 +170,7 @@ class Evaluator:
                 template = image_transform(raw_template.copy()).unsqueeze(0)
                 template_name = os.path.basename(template_path)
 
-                boxes, scores = FE(template_path, template, image_path, image, use_cython=self.config.use_cython)
+                boxes, scores = FE(template_path, template, image_path, image)
 
                 # 複数返す場合は重複削除処理
                 # indexes = self.nms(boxes, scores, thresh=0.5)
@@ -209,7 +209,6 @@ if __name__ == '__main__':
     parser.add_argument('image_dir')
     parser.add_argument('template_dir')
     parser.add_argument('--output_dir', default='results')
-    parser.add_argument('--use_cython', action='store_true')
     parser.add_argument('--cpu', action='store_true')
     parser.add_argument('--loglevel', default='INFO')
     parser.add_argument('--logfile', default=None)
