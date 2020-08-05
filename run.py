@@ -17,8 +17,9 @@ import ast
 class ImageDataset(Dataset):
     IMG_EXTENSIONS = ['.png', 'jpg']
 
-    def __init__(self, image_dir, logger):
-        self.logger = logger
+    def __init__(self, image_dir, config):
+        self.config = config
+        self.logger = config.logger
         self.paths = []
         self.cache = {}
 
@@ -54,7 +55,7 @@ class ImageDataset(Dataset):
     def __transform(self, w, h):
         return transforms.Compose([
             transforms.ToPILImage(),
-            transforms.Resize((h, w)),
+            transforms.Resize((int(h), int(w))),
             transforms.ToTensor(),
             transforms.Normalize(
                 mean=[0.485, 0.456, 0.406],
@@ -73,7 +74,8 @@ class ImageDataset(Dataset):
             img = cv2.imread(path)[..., ::-1]
             h, w, _ = img.shape
 
-            transform = self.__transform(w, h)
+            ratio = self.config.resize
+            transform = self.__transform(w * ratio, h * ratio)
             image = transform(img)
 
             self.cache[index] = image
@@ -197,8 +199,8 @@ class Evaluator:
         vgg_feature = models.vgg13(pretrained=True).features
         FE = FeatureExtractor(self.config, vgg_feature, padding=True)
 
-        dataset_search = ImageDataset(self.config.search_dir, self.config.logger)
-        dataset_template = ImageDataset(self.config.template_dir, self.config.logger)
+        dataset_search = ImageDataset(self.config.search_dir, self.config)
+        dataset_template = ImageDataset(self.config.template_dir, self.config)
         dataloader_search = DataLoader(dataset_search, batch_size=1)
         dataloader_template = DataLoader(dataset_template, batch_size=1)
 
@@ -260,6 +262,7 @@ if __name__ == '__main__':
     parser.add_argument('--summary_result', default=None)
     parser.add_argument('--ntop', type=int, default=2)
     parser.add_argument('--klayer', type=int, default=3)
+    parser.add_argument('--resize', type=float, default=1.0)
     args = parser.parse_args()
 
     is_cpu = args.cpu or not torch.cuda.is_available()
