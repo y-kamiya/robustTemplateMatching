@@ -5,6 +5,10 @@ from run import Evaluator
 
 
 class TestRun(unittest.TestCase):
+    class DummyLogger():
+        def info(self, msg):
+            pass
+
     class DummyConfig():
         image_dir = 'testdata/images'
         template_dir = 'testdata/templates'
@@ -12,8 +16,11 @@ class TestRun(unittest.TestCase):
         use_cuda = False
         use_cython = False
 
+        def __init__(self, logger):
+            self.logger = logger
+
     def setUp(self):
-        config = self.DummyConfig()
+        config = self.DummyConfig(self.DummyLogger())
         self.instance = Evaluator(config)
 
     def test_is_image(self):
@@ -27,7 +34,7 @@ class TestRun(unittest.TestCase):
             'aaa/ccc.png': ([[],[]], [3.0, 1.0]),
             'aaa/ddd.png': ([[],[]], [1.0, 1.0]),
         }
-        result = self.instance.get_matched_templates(score_map, 2)
+        result = self.instance.get_matched_templates(score_map, 2, 'dummy')
 
         self.assertEqual(result[0][0], 'aaa/ccc.png')
         self.assertEqual(result[0][2], 3.0)
@@ -37,7 +44,7 @@ class TestRun(unittest.TestCase):
     def test_get_matched_templates_none(self):
         score_map = {
         }
-        result = self.instance.get_matched_templates(score_map, 2)
+        result = self.instance.get_matched_templates(score_map, 2, 'dummy')
         self.assertEqual(result[0][0], 'none.png')
 
     def test_output_result(self):
