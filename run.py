@@ -143,9 +143,9 @@ class Evaluator:
         FE = FeatureExtractor(self.config, vgg_feature, padding=True)
 
         image_paths = []
-        for path in os.listdir(self.config.image_dir):
+        for path in os.listdir(self.config.search_dir):
             if self.is_img(path):
-                image_paths.append(os.path.join(self.config.image_dir, path))
+                image_paths.append(os.path.join(self.config.search_dir, path))
 
         template_paths = []
         for path in os.listdir(self.config.template_dir):
@@ -206,7 +206,7 @@ class Evaluator:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='robust template matching using CNN')
-    parser.add_argument('image_dir')
+    parser.add_argument('search_dir')
     parser.add_argument('template_dir')
     parser.add_argument('--output_dir', default='results')
     parser.add_argument('--cpu', action='store_true')
