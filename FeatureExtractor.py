@@ -2,21 +2,21 @@ import cv2
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+import torch.nn.functional as func
 import torchvision
 from torchvision import models, transforms, utils
 import numpy as np
 import copy
+import logging
+import sys
+import time
 
 class FeatureExtractor():
-    def __init__(self, model, use_cuda=True, padding=True):
-        self.model = copy.deepcopy(model)
+    def __init__(self, config, model, padding=True):
+        self.config = config
+        self.model = copy.deepcopy(model).to(config.device)
         self.model = self.model.eval()
-        self.use_cuda = use_cuda
         self.feature_maps = []
-
-        if self.use_cuda:
-            self.model = self.model.cuda()
 
         self.index = []
         self.f = []
@@ -34,6 +34,8 @@ class FeatureExtractor():
                 self.stride.append(module.stride)
 
         self.rf = np.array(self.calc_rf(self.f, self.stride))
+
+        self.cache = {}
 
     def save_template_feature_map(self, module, input, output):
         self.template_feature_map = output.detach()
@@ -59,52 +61,82 @@ class FeatureExtractor():
                 res *= x
             return res
 
-    def calc_l_star(self, template, k=3):
+    def calc_l_star(self, template, k):
         l = np.sum(self.rf <= min(list(template.size()[-2:]))) - 1
         l_star = max(l - k, 1)
         return l_star
     
     def calc_NCC(self, F, M):
         c, h_f, w_f = F.shape[-3:]
-        tmp = np.zeros((c, M.shape[-2] - h_f, M.shape[-1] - w_f, h_f, w_f))
-        for i in range(M.shape[-2] - h_f):
-            for j in range(M.shape[-1] - w_f):
-                M_tilde = M[:, :, i:i+h_f, j:j+w_f][:, None, None, :, :]
-                tmp[:, i, j, :, :] = M_tilde / np.linalg.norm(M_tilde)
-        NCC = np.sum(tmp*F.reshape(F.shape[-3], 1, 1, F.shape[-2], F.shape[-1]), axis=(0, 3, 4))
-        return NCC
+        norm_f = F.norm()
 
-    def __call__(self, template, image, threshold=None, use_cython=True):
-        if self.use_cuda:
-            template = template.cuda()
-            image = image.cuda()
+        self.config.logger.debug("image feature map: {}".format(M.shape))
+        self.config.logger.debug("template feature map: {}".format(F.shape))
 
-        self.l_star = self.calc_l_star(template)
+        stime = time.time()
+        h_diff = M.shape[-2] - h_f + 1
+        w_diff = M.shape[-1] - w_f + 1
+        ncc = torch.empty((h_diff, w_diff)).to(self.config.device)
 
-        print("save features...")
+        for i in range(h_diff):
+            for j in range(w_diff):
+                M_tilde = M[:, :, i:i+h_f, j:j+w_f]
+                ncc[i, j] = torch.sum(F * M_tilde / (M_tilde.norm() * norm_f))
 
-        # save template feature map (named F in paper)
-        template_handle = self.model[self.index[self.l_star]].register_forward_hook(
-            self.save_template_feature_map)
-        self.model(template)
-        template_handle.remove()
+        self.config.logger.debug('time of calc NCC: {}'.format(time.time() - stime))
+        return ncc
 
-        # save image feature map (named M in papar)
-        image_handle = self.model[self.index[self.l_star]].register_forward_hook(
-            self.save_image_feature_map)
-        self.model(image)
-        image_handle.remove()
+    def remove_cache(self, image_path):
+        del self.cache[image_path]
 
-        if self.use_cuda:
-            self.template_feature_map = self.template_feature_map.cpu()
-            self.image_feature_map = self.image_feature_map.cpu()
+    def __call__(self, template_path, template, image_path, image, threshold=None, use_cython=True):
+        template = template.to(self.config.device)
+        image = image.to(self.config.device)
 
-        print("calc NCC...")
-        # calc NCC
-        F = self.template_feature_map.numpy()[0].astype(np.float32)
-        M = self.image_feature_map.numpy()[0].astype(np.float32)
+        self.l_star = self.calc_l_star(template, self.config.klayer)
+
+        if image_path not in self.cache:
+            self.cache[image_path] = {}
+
+        if template_path not in self.cache:
+            self.cache[template_path] = {}
+
+        self.config.logger.debug("save features...")
+
+        if self.l_star not in self.cache[template_path]:
+            # save template feature map (named F in paper)
+            template_handle = self.model[self.index[self.l_star]].register_forward_hook(
+                self.save_template_feature_map)
+            self.model(template)
+            template_handle.remove()
+            self.cache[template_path][self.l_star] = self.template_feature_map
+        else:
+            self.template_feature_map = self.cache[template_path][self.l_star]
+
+        if self.l_star not in self.cache[image_path]:
+            # save image feature map (named M in papar)
+            image_handle = self.model[self.index[self.l_star]].register_forward_hook(
+                self.save_image_feature_map)
+            self.model(image)
+            image_handle.remove()
+            self.cache[image_path][self.l_star] = self.image_feature_map
+        else:
+            self.image_feature_map = self.cache[image_path][self.l_star]
+
+        h_t, w_t = self.template_feature_map.shape[-2:]
+        h_i, w_i = self.image_feature_map.shape[-2:]
+        size = [h_t, w_t]
+        if h_i < h_t:
+            size[0] = h_i
+        if w_i < w_t:
+            size[1] = w_i
+        self.template_feature_map = func.interpolate(self.template_feature_map, size=size, mode='bilinear', align_corners=True)
+
+        self.config.logger.debug("calc NCC...")
 
         if use_cython:
+            F = self.template_feature_map.cpu().numpy()[0].astype(np.float32)
+            M = self.image_feature_map.cpu().numpy()[0].astype(np.float32)
             import cython_files.cython_calc_NCC as cython_calc_NCC
             self.NCC = np.zeros(
                 (M.shape[1] - F.shape[1]) * (M.shape[2] - F.shape[2])).astype(np.float32)
@@ -113,24 +145,33 @@ class FeatureExtractor():
             self.NCC = self.NCC.reshape(
                 [M.shape[1] - F.shape[1], M.shape[2] - F.shape[2]])
         else:
-            self.NCC = self.calc_NCC(
-                self.template_feature_map.numpy(), self.image_feature_map.numpy())
+            self.NCC = self.calc_NCC(self.template_feature_map, self.image_feature_map).cpu().numpy()
 
-        if threshold is None:
-            threshold = 0.95 * np.max(self.NCC)
-        max_indices = np.array(np.where(self.NCC > threshold)).T
-        print("detected boxes: {}".format(len(max_indices)))
+        # if threshold is None:
+        #     threshold = 0.95 * np.max(self.NCC)
+        # max_indices = np.array(np.where(self.NCC > threshold)).T
+
+        # 最もスコアの高いものを一つだけ返す
+        # 一つのsearch画像内に同じtemplate画像が複数出てくることは今回の用途ではないため
+        max_indices = np.array([np.unravel_index(np.argmax(self.NCC), self.NCC.shape)])
+        self.config.logger.debug("detected boxes: {}".format(len(max_indices)))
+
+        size_template_feature = self.template_feature_map.size()
 
         boxes = []
         centers = []
         scores = []
+        x_ranges = [ [], [0], [0, 1], [-1, 0, 1], [-2, -1, 0, 1], ]
+        y_ranges = [ [], [0], [0, 1], [-1, 0, 1], ]
         for max_index in max_indices:
             i_star, j_star = max_index
-            NCC_part = self.NCC[i_star-1:i_star+2, j_star-2:j_star+2]
+            i_min = max(0, i_star-1)
+            j_min = max(0, j_star-2)
+            NCC_part = self.NCC[i_min:i_star+2, j_min:j_star+2]
 
-            x_center = (j_star + self.template_feature_map.size()
+            x_center = (j_star + size_template_feature
                         [-1]/2) * image.size()[-1] // self.image_feature_map.size()[-1]
-            y_center = (i_star + self.template_feature_map.size()
+            y_center = (i_star + size_template_feature
                         [-2]/2) * image.size()[-2] // self.image_feature_map.size()[-2]
 
             x1_0 = x_center - template.size()[-1]/2
@@ -140,14 +181,15 @@ class FeatureExtractor():
 
             stride_product = self.product(self.stride[:self.l_star])
 
+            shape = NCC_part.shape
             x1 = np.sum(
-                NCC_part * (x1_0 + np.array([-2, -1, 0, 1]) * stride_product)[None, :]) / np.sum(NCC_part)
+                NCC_part * (x1_0 + np.array(x_ranges[shape[1]]) * stride_product)[None, :]) / np.sum(NCC_part)
             x2 = np.sum(
-                NCC_part * (x2_0 + np.array([-2, -1, 0, 1]) * stride_product)[None, :]) / np.sum(NCC_part)
+                NCC_part * (x2_0 + np.array(x_ranges[shape[1]]) * stride_product)[None, :]) / np.sum(NCC_part)
             y1 = np.sum(
-                NCC_part * (y1_0 + np.array([-1, 0, 1]) * stride_product)[:, None]) / np.sum(NCC_part)
+                NCC_part * (y1_0 + np.array(y_ranges[shape[0]]) * stride_product)[:, None]) / np.sum(NCC_part)
             y2 = np.sum(
-                NCC_part * (y2_0 + np.array([-1, 0, 1]) * stride_product)[:, None]) / np.sum(NCC_part)
+                NCC_part * (y2_0 + np.array(y_ranges[shape[0]]) * stride_product)[:, None]) / np.sum(NCC_part)
 
             x1 = int(round(x1))
             x2 = int(round(x2))
@@ -157,7 +199,8 @@ class FeatureExtractor():
             y_center = int(round(y_center))
 
             boxes.append([(x1, y1), (x2, y2)])
-            centers.append((x_center, y_center))
-            scores.append(np.sum(NCC_part))
+            # centers.append((x_center, y_center))
+            scores.append(np.average(NCC_part))
 
-        return boxes, centers, scores
+        return np.array(boxes), np.array(scores)
+        # return boxes, centers, scores
