@@ -207,6 +207,8 @@ class Evaluator:
         result_by_template = {}
         for image_path, template_paths in result.items():
             for template_path in template_paths:
+                if template_path == 'none.png':
+                    continue
                 if template_path not in result_by_template:
                     result_by_template[template_path] = []
                 result_by_template[template_path].append(image_path)
