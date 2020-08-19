@@ -285,7 +285,7 @@ if __name__ == '__main__':
     parser.add_argument('--logfile', default=None)
     parser.add_argument('--score_threshold', type=float, default=0.3)
     parser.add_argument('--summary_result', default=None)
-    parser.add_argument('--ntop', type=int, default=2)
+    parser.add_argument('--ntop', type=int, default=1)
     parser.add_argument('--klayer', type=int, default=3)
     parser.add_argument('--resize', type=float, default=1.0)
     args = parser.parse_args()
