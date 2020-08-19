@@ -89,7 +89,7 @@ class FeatureExtractor():
     def remove_cache(self, image_path):
         del self.cache[image_path]
 
-    def __call__(self, template_path, template, image_path, image, threshold=None, use_cython=True):
+    def __call__(self, template_path, template, image_path, image):
         template = template.to(self.config.device)
         image = image.to(self.config.device)
 
@@ -134,22 +134,7 @@ class FeatureExtractor():
 
         self.config.logger.debug("calc NCC...")
 
-        if use_cython:
-            F = self.template_feature_map.cpu().numpy()[0].astype(np.float32)
-            M = self.image_feature_map.cpu().numpy()[0].astype(np.float32)
-            import cython_files.cython_calc_NCC as cython_calc_NCC
-            self.NCC = np.zeros(
-                (M.shape[1] - F.shape[1]) * (M.shape[2] - F.shape[2])).astype(np.float32)
-            cython_calc_NCC.c_calc_NCC(M.flatten().astype(np.float32), np.array(M.shape).astype(
-                np.int32), F.flatten().astype(np.float32), np.array(F.shape).astype(np.int32), self.NCC)
-            self.NCC = self.NCC.reshape(
-                [M.shape[1] - F.shape[1], M.shape[2] - F.shape[2]])
-        else:
-            self.NCC = self.calc_NCC(self.template_feature_map, self.image_feature_map).cpu().numpy()
-
-        # if threshold is None:
-        #     threshold = 0.95 * np.max(self.NCC)
-        # max_indices = np.array(np.where(self.NCC > threshold)).T
+        self.NCC = self.calc_NCC(self.template_feature_map, self.image_feature_map).cpu().numpy()
 
         # 最もスコアの高いものを一つだけ返す
         # 一つのsearch画像内に同じtemplate画像が複数出てくることは今回の用途ではないため
