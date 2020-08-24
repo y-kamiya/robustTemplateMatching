@@ -117,7 +117,7 @@ class Evaluator:
             order = order[inds + 1]
 
         return keep
-        
+
     def extract_labels(self, path, is_template=False):
         filename = os.path.basename(path)
         name, _ = os.path.splitext(filename)
@@ -216,6 +216,17 @@ class Evaluator:
         with open(os.path.join(self.config.output_dir, 'result.txt'), 'w') as f:
             f.write(json.dumps(result_by_template))
 
+    def is_smaller_template(self, image, image_path, template, template_path):
+        image_h, image_w = image.shape[-2:]
+        template_h, template_w = template.shape[-2:]
+
+        ratio = self.config.size_check_ratio
+        if image_h < template_h * ratio and image_w < template_w * ratio:
+            self.config.logger.info('search image is too small, search image {}({}x{}), template image {}({}x{})'.format(image_path, image_w, image_h, template_path, template_w, template_h))
+            return True
+
+        return False
+
     def execute(self):
         vgg_feature = models.vgg13(pretrained=True).features
         FE = FeatureExtractor(self.config, vgg_feature, padding=True)
@@ -235,6 +246,10 @@ class Evaluator:
             for data_template in dataloader_template:
                 template = data_template['image']
                 template_path = data_template['path'][0]
+
+                if self.is_smaller_template(image, image_path, template, template_path):
+                    continue
+
                 start_time = time.time()
                 boxes, scores = FE(template_path, template, image_path, image)
 
@@ -264,10 +279,10 @@ class Evaluator:
                 d_img = cv2.rectangle(d_img, (box[0][0],box[0][1]), (box[1][0],box[1][1]), (255, 0, 0), 3)
 
                 result[image_path].append(entry[0])
-                
+
             cv2.imwrite(os.path.join(self.config.output_dir, os.path.basename(image_path)), d_img[..., ::-1])
             logger.info('result: {}\t{}'.format(image_path, result[image_path]))
-            
+
 
         if self.config.predict:
             self.output_predict_result(result)
@@ -288,6 +303,7 @@ if __name__ == '__main__':
     parser.add_argument('--ntop', type=int, default=1)
     parser.add_argument('--klayer', type=int, default=3)
     parser.add_argument('--resize', type=float, default=1.0)
+    parser.add_argument('--size_check_ratio', type=float, default=0.8)
     args = parser.parse_args()
 
     is_cpu = args.cpu or not torch.cuda.is_available()
