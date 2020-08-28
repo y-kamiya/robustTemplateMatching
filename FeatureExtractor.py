@@ -126,10 +126,10 @@ class FeatureExtractor():
         h_t, w_t = self.template_feature_map.shape[-2:]
         h_i, w_i = self.image_feature_map.shape[-2:]
         size = [h_t, w_t]
-        if h_i < h_t:
-            size[0] = h_i
-        if w_i < w_t:
-            size[1] = w_i
+        if h_i <= h_t:
+            size[0] = h_i - 1
+        if w_i <= w_t:
+            size[1] = w_i - 1
         self.template_feature_map = func.interpolate(self.template_feature_map, size=size, mode='bilinear', align_corners=True)
 
         self.config.logger.debug("calc NCC...")
@@ -139,6 +139,7 @@ class FeatureExtractor():
         # 最もスコアの高いものを一つだけ返す
         # 一つのsearch画像内に同じtemplate画像が複数出てくることは今回の用途ではないため
         max_indices = np.array([np.unravel_index(np.argmax(self.NCC), self.NCC.shape)])
+        self.config.logger.debug("NCC shape: {}, max indices: {}".format(self.NCC.shape, max_indices))
         self.config.logger.debug("detected boxes: {}".format(len(max_indices)))
 
         size_template_feature = self.template_feature_map.size()
