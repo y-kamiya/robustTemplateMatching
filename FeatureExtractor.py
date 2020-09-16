@@ -134,12 +134,16 @@ class FeatureExtractor():
 
         self.config.logger.debug("calc NCC...")
 
-        self.NCC = self.calc_NCC(self.template_feature_map, self.image_feature_map).cpu().numpy()
+        ncc = self.calc_NCC(self.template_feature_map, self.image_feature_map).cpu().numpy()
 
+        return self.__calc_scores(ncc, image, template)
+
+
+    def __calc_scores(self, ncc, image, template):
         # 最もスコアの高いものを一つだけ返す
         # 一つのsearch画像内に同じtemplate画像が複数出てくることは今回の用途ではないため
-        max_indices = np.array([np.unravel_index(np.argmax(self.NCC), self.NCC.shape)])
-        self.config.logger.debug("NCC shape: {}, max indices: {}".format(self.NCC.shape, max_indices))
+        max_indices = np.array([np.unravel_index(np.argmax(ncc), ncc.shape)])
+        self.config.logger.debug("NCC shape: {}, max indices: {}".format(ncc.shape, max_indices))
         self.config.logger.debug("detected boxes: {}".format(len(max_indices)))
 
         size_template_feature = self.template_feature_map.size()
@@ -153,7 +157,7 @@ class FeatureExtractor():
             i_star, j_star = max_index
             i_min = max(0, i_star-1)
             j_min = max(0, j_star-2)
-            NCC_part = self.NCC[i_min:i_star+2, j_min:j_star+2]
+            NCC_part = ncc[i_min:i_star+2, j_min:j_star+2]
 
             x_center = (j_star + size_template_feature
                         [-1]/2) * image.size()[-1] // self.image_feature_map.size()[-1]
@@ -185,8 +189,7 @@ class FeatureExtractor():
             y_center = int(round(y_center))
 
             boxes.append([(x1, y1), (x2, y2)])
-            # centers.append((x_center, y_center))
             scores.append(np.average(NCC_part))
 
         return np.array(boxes), np.array(scores)
-        # return boxes, centers, scores
+
