@@ -263,6 +263,14 @@ class Evaluator:
 
                 logger.info('{:.2f}\t{:.4}\t{}\t{}'.format(time.time() - start_time, scores[0], template_path, image_path))
 
+                if self.config.output_by_templates:
+                    output_dir = os.path.join(self.config.output_dir, os.path.basename(image_path))
+                    os.makedirs(output_dir, exist_ok=True)
+
+                    matched_entries = self.get_matched_templates({template_path: [boxes, scores]}, 1, template_path)
+                    output_path = os.path.join(output_dir, os.path.basename(template_path))
+                    self.output_image(matched_entries, image_path, output_path)
+
             FE.remove_cache(image_path)
 
             matched_entries = self.get_matched_templates(score_map, self.config.ntop, image_path)
@@ -271,16 +279,9 @@ class Evaluator:
             if len(matched_entries) == 0:
                 continue
 
-            result[image_path] = []
-            raw_image = cv2.imread(image_path)[..., ::-1]
-            d_img = raw_image.astype(np.uint8).copy()
-            for entry in matched_entries:
-                box = entry[1]
-                d_img = cv2.rectangle(d_img, (box[0][0],box[0][1]), (box[1][0],box[1][1]), (255, 0, 0), 3)
+            output_path = os.path.join(self.config.output_dir, os.path.basename(image_path))
+            result[image_path] = self.output_image(matched_entries, image_path, output_path)
 
-                result[image_path].append(entry[0])
-
-            cv2.imwrite(os.path.join(self.config.output_dir, os.path.basename(image_path)), d_img[..., ::-1])
             logger.info('result: {}\t{}'.format(image_path, result[image_path]))
 
 
@@ -288,6 +289,23 @@ class Evaluator:
             self.output_predict_result(result)
         else:
             self.output_eval_result(result)
+
+    def output_image(self, matched_entries, image_path, output_path):
+        matched_templates = []
+
+        raw_image = cv2.imread(image_path)[..., ::-1]
+        h, w, _ = raw_image.shape
+        raw_image = cv2.resize(raw_image, (int(w * self.config.resize), int(h * self.config.resize)))
+
+        d_img = raw_image.astype(np.uint8).copy()
+
+        for entry in matched_entries:
+            box = entry[1]
+            d_img = cv2.rectangle(d_img, (box[0][0],box[0][1]), (box[1][0],box[1][1]), (255, 0, 0), 3)
+            matched_templates.append(entry[0])
+
+        cv2.imwrite(output_path, d_img[..., ::-1])
+        return matched_templates
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='robust template matching using CNN')
@@ -304,6 +322,7 @@ if __name__ == '__main__':
     parser.add_argument('--klayer', type=int, default=3)
     parser.add_argument('--resize', type=float, default=1.0)
     parser.add_argument('--size_check_ratio', type=float, default=0.8)
+    parser.add_argument('--output_by_templates', action='store_true')
     args = parser.parse_args()
 
     is_cpu = args.cpu or not torch.cuda.is_available()
