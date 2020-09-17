@@ -123,21 +123,42 @@ class FeatureExtractor():
         else:
             self.image_feature_map = self.cache[image_path][self.l_star]
 
-        h_t, w_t = self.template_feature_map.shape[-2:]
-        h_i, w_i = self.image_feature_map.shape[-2:]
-        size = [h_t, w_t]
-        if h_i <= h_t:
-            size[0] = h_i - 1
-        if w_i <= w_t:
-            size[1] = w_i - 1
-        self.template_feature_map = func.interpolate(self.template_feature_map, size=size, mode='bilinear', align_corners=True)
+        template_feature_maps = self.__create_scaled_template_feature_maps(self.template_feature_map, self.image_feature_map)
 
         self.config.logger.debug("calc NCC...")
 
-        ncc = self.calc_NCC(self.template_feature_map, self.image_feature_map).cpu().numpy()
+        boxes = []
+        scores = []
+        for template_map in template_feature_maps:
+            ncc = self.calc_NCC(template_map, self.image_feature_map).cpu().numpy()
+            result = self.__calc_scores(ncc, image, template)
+            boxes += result[0]
+            scores += result[1]
 
-        return self.__calc_scores(ncc, image, template)
+        return np.array(boxes), np.array(scores)
 
+    def __create_scaled_template_feature_maps(self, template_feature_map, image_feature_map):
+        h_t, w_t = template_feature_map.shape[-2:]
+        h_i, w_i = image_feature_map.shape[-2:]
+
+        scaled_template_feature_maps = []
+        # scales = [1/3, 2/3, 1.0]
+        # for scale in scales:
+        #     scaled_size = [int(h_t * scale), int(w_t * scale)]
+        #     if h_i <= scaled_size[0] or w_i <= scaled_size[1]:
+        #         continue
+        #
+        #     scaled_template_feature_maps.append(func.interpolate(template_feature_map, size=scaled_size, mode='bilinear', align_corners=True))
+
+        if len(scaled_template_feature_maps) == 0:
+            size = [h_t, w_t]
+            if h_i <= h_t:
+                size[0] = h_i - 1
+            if w_i <= w_t:
+                size[1] = w_i - 1
+            scaled_template_feature_maps.append(func.interpolate(template_feature_map, size=size, mode='bilinear', align_corners=True))
+
+        return scaled_template_feature_maps
 
     def __calc_scores(self, ncc, image, template):
         # 最もスコアの高いものを一つだけ返す
@@ -191,5 +212,5 @@ class FeatureExtractor():
             boxes.append([(x1, y1), (x2, y2)])
             scores.append(np.average(NCC_part))
 
-        return np.array(boxes), np.array(scores)
+        return boxes, scores
 
