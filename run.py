@@ -247,11 +247,22 @@ class Evaluator:
                 template = data_template['image']
                 template_path = data_template['path'][0]
 
-                if self.is_smaller_template(image, image_path, template, template_path):
-                    continue
-
                 start_time = time.time()
-                boxes, scores = FE(template_path, template, image_path, image)
+                boxes = []
+                scores = [0.0]
+                h, w = template.shape[-2:]
+                for scale in self.config.template_scales:
+                    size = [int(w * scale), int(h * scale)]
+                    scaled_template = F.interpolate(template, size=size, mode='bilinear', align_corners=True)
+                    if self.is_smaller_template(image, image_path, scaled_template, template_path):
+                        continue
+
+                    tmp = FE(template_path, scaled_template, image_path, image)
+                    logger.debug('{:.2f}\t{:.4}\t{}\tscale:{:.2f}'.format(time.time() - start_time, tmp[1][0], template_path, scale))
+
+                    if scores[0] < tmp[1][0]:
+                        boxes = tmp[0]
+                        scores = tmp[1]
 
                 # 複数返す場合は重複削除処理
                 # indexes = self.nms(boxes, scores, thresh=0.5)
@@ -323,11 +334,14 @@ if __name__ == '__main__':
     parser.add_argument('--resize', type=float, default=1.0)
     parser.add_argument('--size_check_ratio', type=float, default=0.8)
     parser.add_argument('--output_by_templates', action='store_true')
+    parser.add_argument('--template_scales', type=float, nargs='*', default=[])
     args = parser.parse_args()
 
     is_cpu = args.cpu or not torch.cuda.is_available()
     args.device_name = "cpu" if is_cpu else "cuda"
     args.device = torch.device(args.device_name)
+
+    args.template_scales.append(1.0)
 
     logging.basicConfig(level=getattr(logging, args.loglevel))
 
