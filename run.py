@@ -9,11 +9,12 @@ import torch.nn as nn
 import torch
 from torch.utils.data import Dataset, DataLoader
 import argparse
-from FeatureExtractor import FeatureExtractor
 import sys
 import logging
 import ast
 import json
+
+from detector import Detector
 
 class ImageDataset(Dataset):
     IMG_EXTENSIONS = ['.png', 'jpg']
@@ -91,7 +92,7 @@ class Evaluator:
         self.config = config
 
         vgg_feature = models.vgg13(pretrained=True).features
-        self.detector = FeatureExtractor(self.config, vgg_feature, padding=True)
+        self.detector = Detector(self.config, vgg_feature, padding=True)
 
     def nms(self, dets, scores, thresh):
         x1 = dets[:, 0, 0]

@@ -12,7 +12,7 @@ import sys
 import time
 import hashlib
 
-class FeatureExtractor():
+class Detector():
     def __init__(self, config, model, padding=True):
         self.config = config
         self.model = copy.deepcopy(model).to(config.device)
