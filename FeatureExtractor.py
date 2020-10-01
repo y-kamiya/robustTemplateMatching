@@ -87,7 +87,8 @@ class FeatureExtractor():
         return ncc
 
     def remove_cache(self, image_path):
-        del self.cache[image_path]
+        if image_path in self.cache:
+            del self.cache[image_path]
 
     def __call__(self, template_path, template, image_path, image):
         template = template.to(self.config.device)
