@@ -107,22 +107,22 @@ class FeatureExtractor():
         template = template.to(self.config.device)
         image = image.to(self.config.device)
 
-        self.l_star = self.calc_l_star(template, self.config.klayer)
+        l_star = self.calc_l_star(template, self.config.klayer)
 
         self.config.logger.debug("save features...")
 
-        self.template_feature_map = self.__get_feature_map(template, self.l_star)
-        self.image_feature_map = self.__get_feature_map(image, self.l_star)
+        template_feature_map = self.__get_feature_map(template, l_star)
+        image_feature_map = self.__get_feature_map(image, l_star)
 
-        template_feature_maps = self.__create_scaled_template_feature_maps(self.template_feature_map, self.image_feature_map)
+        template_feature_maps = self.__adjust_template_feature_maps(template_feature_map, image_feature_map)
 
         self.config.logger.debug("calc NCC...")
 
         boxes = []
         scores = []
         for template_map in template_feature_maps:
-            ncc = self.calc_NCC(template_map, self.image_feature_map).cpu().numpy()
-            result = self.__calc_scores(ncc, image, template)
+            ncc = self.calc_NCC(template_map, image_feature_map).cpu().numpy()
+            result = self.__calc_scores(ncc, l_star, template, image, template_feature_map, image_feature_map)
             boxes += result[0]
             scores += result[1]
 
@@ -131,7 +131,7 @@ class FeatureExtractor():
     def __hash(self, img):
         return hashlib.md5(img.numpy()).hexdigest()
 
-    def __create_scaled_template_feature_maps(self, template_feature_map, image_feature_map):
+    def __adjust_template_feature_maps(self, template_feature_map, image_feature_map):
         h_t, w_t = template_feature_map.shape[-2:]
         h_i, w_i = image_feature_map.shape[-2:]
 
@@ -154,14 +154,17 @@ class FeatureExtractor():
 
         return scaled_template_feature_maps
 
-    def __calc_scores(self, ncc, image, template):
+    def __calc_scores(self, ncc, l_star, template, image, template_feature_map, image_feature_map):
         # 最もスコアの高いものを一つだけ返す
         # 一つのsearch画像内に同じtemplate画像が複数出てくることは今回の用途ではないため
         max_indices = np.array([np.unravel_index(np.argmax(ncc), ncc.shape)])
         self.config.logger.debug("NCC shape: {}, max indices: {}".format(ncc.shape, max_indices))
         self.config.logger.debug("detected boxes: {}".format(len(max_indices)))
 
-        size_template_feature = self.template_feature_map.size()
+        size_template = template.size()
+        size_image = image.size()
+        size_template_feature = template_feature_map.size()
+        size_image_feature = image_feature_map.size()
 
         boxes = []
         centers = []
@@ -175,16 +178,16 @@ class FeatureExtractor():
             NCC_part = ncc[i_min:i_star+2, j_min:j_star+2]
 
             x_center = (j_star + size_template_feature
-                        [-1]/2) * image.size()[-1] // self.image_feature_map.size()[-1]
+                        [-1]/2) * size_image[-1] // size_image_feature[-1]
             y_center = (i_star + size_template_feature
-                        [-2]/2) * image.size()[-2] // self.image_feature_map.size()[-2]
+                        [-2]/2) * size_image[-2] // size_image_feature[-2]
 
-            x1_0 = x_center - template.size()[-1]/2
-            x2_0 = x_center + template.size()[-1]/2
-            y1_0 = y_center - template.size()[-2]/2
-            y2_0 = y_center + template.size()[-2]/2
+            x1_0 = x_center - size_template[-1]/2
+            x2_0 = x_center + size_template[-1]/2
+            y1_0 = y_center - size_template[-2]/2
+            y2_0 = y_center + size_template[-2]/2
 
-            stride_product = self.product(self.stride[:self.l_star])
+            stride_product = self.product(self.stride[:l_star])
 
             shape = NCC_part.shape
             x1 = np.sum(
