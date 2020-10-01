@@ -23,11 +23,6 @@ class TestRun(unittest.TestCase):
         config = self.DummyConfig(self.DummyLogger())
         self.instance = Evaluator(config)
 
-    def test_is_image(self):
-        self.assertEqual(self.instance.is_img('aaa/bbb.png'), True)
-        self.assertEqual(self.instance.is_img('aaa/bbb.jpg'), True)
-        self.assertEqual(self.instance.is_img('aaa/bbb.txt'), False)
-
     def test_get_matched_templates(self):
         score_map = {
             'aaa/bbb.png': ([[],[]], [1.0, 2.0]),
@@ -52,7 +47,7 @@ class TestRun(unittest.TestCase):
             'aaa/label0@aeara.png': ['aaa/label0.png', 'aaa/label1.png'],
             'aaa/label2@label3@aegq.png': ['aaa/label2.png', 'aaa/label3.png'],
         }
-        accuracy, precision, recall = self.instance.output_result(data, False)
+        accuracy, precision, recall = self.instance.output_eval_result(data, False)
         self.assertEqual(int(accuracy), 75)
         self.assertEqual(int(precision), 75)
         self.assertEqual(int(recall), 100)
@@ -61,7 +56,7 @@ class TestRun(unittest.TestCase):
             'aaa/none@wefwe.png': ['none.png'],
             'aaa/none@ewwgb.png': ['aaa/label0.png', 'aaa/label1.png'],
         }
-        accuracy, precision, recall = self.instance.output_result(data, False)
+        accuracy, precision, recall = self.instance.output_eval_result(data, False)
         self.assertEqual(int(accuracy), 50)
         self.assertEqual(int(precision), 50)
         self.assertEqual(int(recall), 50)
