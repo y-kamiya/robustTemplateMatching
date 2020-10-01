@@ -90,6 +90,9 @@ class Evaluator:
     def __init__(self, config):
         self.config = config
 
+        vgg_feature = models.vgg13(pretrained=True).features
+        self.detector = FeatureExtractor(self.config, vgg_feature, padding=True)
+
     def nms(self, dets, scores, thresh):
         x1 = dets[:, 0, 0]
         y1 = dets[:, 0, 1]
@@ -228,9 +231,6 @@ class Evaluator:
         return False
 
     def execute(self):
-        vgg_feature = models.vgg13(pretrained=True).features
-        FE = FeatureExtractor(self.config, vgg_feature, padding=True)
-
         dataset_search = ImageDataset(self.config.search_dir, self.config)
         dataset_template = ImageDataset(self.config.template_dir, self.config)
         dataloader_search = DataLoader(dataset_search, batch_size=1)
@@ -247,22 +247,7 @@ class Evaluator:
                 template = data_template['image']
                 template_path = data_template['path'][0]
 
-                start_time = time.time()
-                boxes = []
-                scores = [0.0]
-                h, w = template.shape[-2:]
-                for scale in self.config.template_scales:
-                    size = [int(w * scale), int(h * scale)]
-                    scaled_template = F.interpolate(template, size=size, mode='bilinear', align_corners=True)
-                    if self.is_smaller_template(image, image_path, scaled_template, template_path):
-                        continue
-
-                    tmp = FE(scaled_template, image)
-                    logger.debug('{:.2f}\t{:.4}\t{}\tscale:{:.2f}'.format(time.time() - start_time, tmp[1][0], template_path, scale))
-
-                    if scores[0] < tmp[1][0]:
-                        boxes = tmp[0]
-                        scores = tmp[1]
+                boxes, scores = self.__detect(image, image_path, template, template_path)
 
                 # 複数返す場合は重複削除処理
                 # indexes = self.nms(boxes, scores, thresh=0.5)
@@ -272,8 +257,6 @@ class Evaluator:
                 if self.config.score_threshold <= scores[0]:
                     score_map[template_path] = [boxes, scores]
 
-                logger.info('{:.2f}\t{:.4}\t{}\t{}'.format(time.time() - start_time, scores[0], template_path, image_path))
-
                 if self.config.output_by_templates:
                     output_dir = os.path.join(self.config.output_dir, os.path.basename(image_path))
                     os.makedirs(output_dir, exist_ok=True)
@@ -282,7 +265,7 @@ class Evaluator:
                     output_path = os.path.join(output_dir, os.path.basename(template_path))
                     self.output_image(matched_entries, image_path, output_path)
 
-            FE.remove_cache(image)
+            self.detector.remove_cache(image)
 
             matched_entries = self.get_matched_templates(score_map, self.config.ntop, image_path)
             logger.debug('{} matches {}'.format(image_path, matched_entries))
@@ -300,6 +283,29 @@ class Evaluator:
             self.output_predict_result(result)
         else:
             self.output_eval_result(result)
+
+    def __detect(self, image, image_path, template, template_path):
+        start_time = time.time()
+        boxes = []
+        scores = [0.0]
+        h, w = template.shape[-2:]
+
+        for scale in self.config.template_scales:
+            size = [int(w * scale), int(h * scale)]
+            scaled_template = F.interpolate(template, size=size, mode='bilinear', align_corners=True)
+            if self.is_smaller_template(image, image_path, scaled_template, template_path):
+                continue
+
+            tmp = self.detector(scaled_template, image)
+            logger.debug('{:.2f}\t{:.4}\t{}\tscale:{:.2f}'.format(time.time() - start_time, tmp[1][0], template_path, scale))
+
+            if scores[0] < tmp[1][0]:
+                boxes = tmp[0]
+                scores = tmp[1]
+
+        logger.info('{:.2f}\t{:.4}\t{}\t{}'.format(time.time() - start_time, scores[0], template_path, image_path))
+
+        return boxes, scores
 
     def output_image(self, matched_entries, image_path, output_path):
         matched_templates = []
