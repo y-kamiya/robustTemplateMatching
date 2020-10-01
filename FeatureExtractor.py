@@ -10,6 +10,7 @@ import copy
 import logging
 import sys
 import time
+import hashlib
 
 class FeatureExtractor():
     def __init__(self, config, model, padding=True):
@@ -37,11 +38,8 @@ class FeatureExtractor():
 
         self.cache = {}
 
-    def save_template_feature_map(self, module, input, output):
-        self.template_feature_map = output.detach()
-
-    def save_image_feature_map(self, module, input, output):
-        self.image_feature_map = output.detach()
+    def save_tmp_feature_map(self, module, input, output):
+        self.tmp_feature_map = output.detach()
 
     def calc_rf(self, f, stride):
         rf = []
@@ -86,43 +84,35 @@ class FeatureExtractor():
         self.config.logger.debug('time of calc NCC: {}'.format(time.time() - stime))
         return ncc
 
-    def remove_cache(self, image_path):
-        if image_path in self.cache:
-            del self.cache[image_path]
+    def remove_cache(self, image):
+        hash = self.__hash(image)
+        if hash in self.cache:
+            del self.cache[hash]
 
-    def __call__(self, template_path, template, image_path, image):
+    def __get_feature_map(self, img, l_star):
+        hash = self.__hash(img)
+        if hash not in self.cache:
+            self.cache[hash] = {}
+
+        feature_map = self.cache[hash].get(l_star, None)
+        if feature_map is None:
+            handle = self.model[self.index[l_star]].register_forward_hook(self.save_tmp_feature_map)
+            self.model(img)
+            handle.remove()
+            self.cache[hash][l_star] = self.tmp_feature_map
+
+        return self.cache[hash][l_star] 
+
+    def __call__(self, template, image):
         template = template.to(self.config.device)
         image = image.to(self.config.device)
 
         self.l_star = self.calc_l_star(template, self.config.klayer)
 
-        if image_path not in self.cache:
-            self.cache[image_path] = {}
-
-        if template_path not in self.cache:
-            self.cache[template_path] = {}
-
         self.config.logger.debug("save features...")
 
-        if self.l_star not in self.cache[template_path]:
-            # save template feature map (named F in paper)
-            template_handle = self.model[self.index[self.l_star]].register_forward_hook(
-                self.save_template_feature_map)
-            self.model(template)
-            template_handle.remove()
-            self.cache[template_path][self.l_star] = self.template_feature_map
-        else:
-            self.template_feature_map = self.cache[template_path][self.l_star]
-
-        if self.l_star not in self.cache[image_path]:
-            # save image feature map (named M in papar)
-            image_handle = self.model[self.index[self.l_star]].register_forward_hook(
-                self.save_image_feature_map)
-            self.model(image)
-            image_handle.remove()
-            self.cache[image_path][self.l_star] = self.image_feature_map
-        else:
-            self.image_feature_map = self.cache[image_path][self.l_star]
+        self.template_feature_map = self.__get_feature_map(template, self.l_star)
+        self.image_feature_map = self.__get_feature_map(image, self.l_star)
 
         template_feature_maps = self.__create_scaled_template_feature_maps(self.template_feature_map, self.image_feature_map)
 
@@ -137,6 +127,9 @@ class FeatureExtractor():
             scores += result[1]
 
         return np.array(boxes), np.array(scores)
+
+    def __hash(self, img):
+        return hashlib.md5(img.numpy()).hexdigest()
 
     def __create_scaled_template_feature_maps(self, template_feature_map, image_feature_map):
         h_t, w_t = template_feature_map.shape[-2:]

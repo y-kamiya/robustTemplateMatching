@@ -257,7 +257,7 @@ class Evaluator:
                     if self.is_smaller_template(image, image_path, scaled_template, template_path):
                         continue
 
-                    tmp = FE(template_path, scaled_template, image_path, image)
+                    tmp = FE(scaled_template, image)
                     logger.debug('{:.2f}\t{:.4}\t{}\tscale:{:.2f}'.format(time.time() - start_time, tmp[1][0], template_path, scale))
 
                     if scores[0] < tmp[1][0]:
@@ -282,7 +282,7 @@ class Evaluator:
                     output_path = os.path.join(output_dir, os.path.basename(template_path))
                     self.output_image(matched_entries, image_path, output_path)
 
-            FE.remove_cache(image_path)
+            FE.remove_cache(image)
 
             matched_entries = self.get_matched_templates(score_map, self.config.ntop, image_path)
             logger.debug('{} matches {}'.format(image_path, matched_entries))
