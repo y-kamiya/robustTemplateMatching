@@ -6,3 +6,5 @@ template_private/
 robustTM.ipynb
 py_sample.py
 results/
+venv*
+.DS_store
