@@ -289,21 +289,26 @@ class Evaluator:
         start_time = time.time()
         boxes = []
         scores = [0.0]
-        h, w = template.shape[-2:]
 
-        for scale in self.config.template_scales:
-            size = [int(w * scale), int(h * scale)]
+        h_t, w_t = template.shape[-2:]
+        size_list = [(int(h_t * scale), int(w_t * scale)) for scale in self.config.template_scales]
+
+        h_i, w_i = image.shape[-2:]
+        size_list.append((h_i, w_i))
+
+        for size in size_list:
             scaled_template = F.interpolate(template, size=size, mode='bilinear', align_corners=True)
             if self.is_smaller_template(image, image_path, scaled_template, template_path):
                 continue
 
             tmp = self.detector(scaled_template, image)
-            logger.debug('{:.2f}\t{:.4}\t{}\tscale:{:.2f}'.format(time.time() - start_time, tmp[1][0], template_path, scale))
+            logger.debug('{:.2f}\t{:.4}\t{}\ttemplate size:({},{})'.format(time.time() - start_time, tmp[1][0], template_path, size[1], size[0]))
 
             if scores[0] < tmp[1][0]:
                 boxes = tmp[0]
                 scores = tmp[1]
 
+        logger.debug('image size:({},{})'.format(w_i, h_i))
         logger.info('{:.2f}\t{:.4}\t{}\t{}'.format(time.time() - start_time, scores[0], template_path, image_path))
 
         return boxes, scores
